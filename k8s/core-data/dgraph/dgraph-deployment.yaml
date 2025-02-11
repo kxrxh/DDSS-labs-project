@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dgraph-zero
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dgraph-zero
+  template:
+    metadata:
+      labels:
+        app: dgraph-zero
+    spec:
+      containers:
+      - name: dgraph-zero
+        image: dgraph/dgraph:latest
+        ports:
+        - containerPort: 5080
+        - containerPort: 6080
+        args:
+        - dgraph
+        - zero
+        - --my=dgraph-zero:5080
+        volumeMounts:
+        - name: dgraph-zero-storage
+          mountPath: /dgraph
+      volumes:
+      - name: dgraph-zero-storage
+        persistentVolumeClaim:
+          claimName: dgraph-zero-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dgraph-alpha
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dgraph-alpha
+  template:
+    metadata:
+      labels:
+        app: dgraph-alpha
+    spec:
+      containers:
+      - name: dgraph-alpha
+        image: dgraph/dgraph:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 9080
+        args:
+        - dgraph
+        - alpha
+        - --my=dgraph-alpha:7080
+        - --zero=dgraph-zero:5080
+        - --security=whitelist=0.0.0.0/0
+        volumeMounts:
+        - name: dgraph-alpha-storage
+          mountPath: /dgraph
+      volumes:
+      - name: dgraph-alpha-storage
+        persistentVolumeClaim:
+          claimName: dgraph-alpha-pvc 

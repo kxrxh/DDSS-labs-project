@@ -1,0 +1,25 @@
+type Citizen {
+  id: ID!
+  name: String! @search(by: [term])
+  score: Float! @search
+  relationships: [Relationship] @hasInverse(field: participants)
+  events: [Event] @hasInverse(field: citizen)
+  region: String @search(by: [term])
+  occupation: String @search(by: [term])
+  lastUpdated: DateTime @search
+}
+
+type Relationship {
+  type: String! @search(by: [exact])
+  participants: [Citizen]! @hasInverse(field: relationships)
+  weight: Float
+  startDate: DateTime @search
+}
+
+type Event {
+  type: String! @search(by: [exact])
+  citizen: Citizen!
+  score_change: Float!
+  timestamp: DateTime! @search
+  description: String @search(by: [fulltext])
+} 
