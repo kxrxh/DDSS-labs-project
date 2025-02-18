@@ -39,6 +39,12 @@ resource "kubernetes_stateful_set" "mongodb" {
     namespace = kubernetes_namespace.mongodb.metadata[0].name
   }
 
+  lifecycle {
+    replace_triggered_by = [
+      kubernetes_namespace.mongodb
+    ]
+  }
+
   spec {
     service_name = kubernetes_service.mongodb_headless.metadata[0].name
     replicas     = var.replicas
@@ -89,6 +95,3 @@ resource "kubernetes_stateful_set" "mongodb" {
     }
   }
 }
-
-# ... (rest of the MongoDB resources from the previous example) ...
-# Parameterize everything using variables (see variables.tf below) 
