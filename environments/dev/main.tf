@@ -8,14 +8,14 @@ terraform {
 }
 
 provider "kubernetes" {
-  config_path = "/Users/kxrxh/.kube/config"  # ABSOLUTE PATH -  Change this!
+  config_path = "~/.kube/config"  # ABSOLUTE PATH -  Change this!
 }
 
 module "mongodb" {
   source = "../../modules/mongodb"
 
-  namespace    = "mongodb-dev-new"
+  namespace    = "mongodb-dev"
   replicas     = 1          # Fewer replicas in dev
   storage_size = "5Gi"      # Smaller storage in dev
-  mongo_image = "mongo:5.0"
+  mongo_image = "mongo:latest"
 } 
