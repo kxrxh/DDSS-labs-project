@@ -50,8 +50,10 @@ resource "kubernetes_stateful_set" "pd" {
     namespace = var.namespace
   }
   spec {
-    service_name = "tikv-pd"
-    replicas     = var.pd_replicas
+    pod_management_policy = "Parallel"  # Allows all pods to be created concurrently
+    service_name          = "tikv-pd"
+    replicas              = var.pd_replicas
+
     selector {
       match_labels = {
         app = "tikv-pd"
@@ -70,7 +72,7 @@ resource "kubernetes_stateful_set" "pd" {
           args  = [
             "--name=$(POD_NAME)",
             "--client-urls=http://0.0.0.0:2379",  # Listen on all interfaces for clients
-            "--peer-urls=http://0.0.0.0:2380",    # Listen on all interfaces for peers
+            "--peer-urls=http://0.0.0.0:2380",      # Listen on all interfaces for peers
             "--advertise-client-urls=http://$(POD_NAME).${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2379",
             "--advertise-peer-urls=http://$(POD_NAME).${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2380",
             "--initial-cluster=${join(",", [for i in range(var.pd_replicas) : format("tikv-pd-%d=http://tikv-pd-%d.%s.%s.svc.cluster.local:2380", i, i, kubernetes_service.pd_service.metadata[0].name, var.namespace)])}",

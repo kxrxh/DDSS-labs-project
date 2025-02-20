@@ -15,26 +15,26 @@ module "mongodb" {
   source = "../../modules/mongodb"
 
   namespace    = "mongodb-dev"
-  replicas     = 3          # Minimum for proper replica set elections
-  storage_size = "5Gi"
-  mongo_image = "mongo:latest"
+  replicas     = 5          # Updated
+  storage_size = "5Gi"      # Increase based on data size
+  mongo_image  = "mongo:latest"
 }
 
 module "dgraph" {
   source = "../../modules/dgraph"
 
   namespace          = "dgraph-dev"
-  zero_replicas      = 3     # Odd number for raft consensus
-  alpha_replicas     = 2     # Even number can accept rolling updates
+  zero_replicas      = 5     # Updated
+  alpha_replicas     = 6     # Updated
   zero_storage_size  = "2Gi" 
   alpha_storage_size = "2Gi" 
-} 
+}
 
 module "tikv" {
-  source       = "../../modules/tikv"
-  namespace    = "tikv-dev"
-  pd_replicas  = 1
-  tikv_replicas = 1
-  pd_image     = "pingcap/pd:latest"
-  tikv_image   = "pingcap/tikv:latest"
+  source        = "../../modules/tikv"
+  namespace     = "tikv-dev"
+  pd_replicas   = 1     # Updated
+  tikv_replicas = 1     # Updated
+  pd_image      = "pingcap/pd:latest"
+  tikv_image    = "pingcap/tikv:latest"
 }
