@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
+	"github.com/tikv/client-go/v2/txnkv"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -14,14 +14,14 @@ import (
 type Client struct {
 	graph *DgraphClient
 	doc   *mongo.Client
-	sql   *sql.DB
+	tikv  *txnkv.Client
 }
 
 // Config holds database connection configuration
 type Config struct {
-	DgraphAddr  string
-	MongoURI    string
-	PostgresURI string
+	DgraphAddr string
+	MongoURI   string
+	TiKVAddr   []string // TiKV accepts a list of PD addresses
 }
 
 // NewClient creates a new composite database client
@@ -38,16 +38,16 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("failed to create mongo client: %w", err)
 	}
 
-	// Initialize Postgres client
-	pgClient, err := sql.Open("postgres", cfg.PostgresURI)
+	// Initialize TiKV client
+	tikvClient, err := txnkv.NewClient(cfg.TiKVAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create postgres client: %w", err)
+		return nil, fmt.Errorf("failed to create tikv client: %w", err)
 	}
 
 	return &Client{
 		graph: dgraph,
 		doc:   mongoClient,
-		sql:   pgClient,
+		tikv:  tikvClient,
 	}, nil
 }
 
@@ -57,7 +57,7 @@ func (c *Client) Close() error {
 	if err := c.doc.Disconnect(context.Background()); err != nil {
 		errs = append(errs, err)
 	}
-	if err := c.sql.Close(); err != nil {
+	if err := c.tikv.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
