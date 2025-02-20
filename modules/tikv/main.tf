@@ -24,7 +24,7 @@ resource "kubernetes_service" "pd_service" {
   }
 }
 
-# TiKV Service
+# TiKV Service (unchanged)
 resource "kubernetes_service" "tikv_service" {
   metadata {
     name      = "tikv"
@@ -43,14 +43,15 @@ resource "kubernetes_service" "tikv_service" {
   }
 }
 
-# Placement Driver (PD) Deployment
-resource "kubernetes_deployment" "pd" {
+# Placement Driver (PD) StatefulSet
+resource "kubernetes_stateful_set" "pd" {
   metadata {
     name      = "tikv-pd"
     namespace = var.namespace
   }
   spec {
-    replicas = var.pd_replicas
+    service_name = "tikv-pd"
+    replicas     = var.pd_replicas
     selector {
       match_labels = {
         app = "tikv-pd"
@@ -67,52 +68,69 @@ resource "kubernetes_deployment" "pd" {
           name  = "pd"
           image = var.pd_image
           args  = [
-            "--name=pd",
-            "--advertise-client-urls=http://tikv-pd.${var.namespace}.svc.cluster.local:2379",
-            "--advertise-peer-urls=http://tikv-pd.${var.namespace}.svc.cluster.local:2380",
-            "--initial-cluster=pd=http://tikv-pd.${var.namespace}.svc.cluster.local:2380",
+            "--name=$(POD_NAME)",
+            "--client-urls=http://0.0.0.0:2379",  # Listen on all interfaces for clients
+            "--peer-urls=http://0.0.0.0:2380",    # Listen on all interfaces for peers
+            "--advertise-client-urls=http://$(POD_NAME).${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2379",
+            "--advertise-peer-urls=http://$(POD_NAME).${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2380",
+            "--initial-cluster=${join(",", [for i in range(var.pd_replicas) : format("tikv-pd-%d=http://tikv-pd-%d.%s.%s.svc.cluster.local:2380", i, i, kubernetes_service.pd_service.metadata[0].name, var.namespace)])}",
             "--data-dir=/data/pd"
           ]
+          env {
+            name = "POD_NAME"
+            value_from {
+              field_ref {
+                field_path = "metadata.name"
+              }
+            }
+          }
           port {
             container_port = 2379
+            name           = "pd-client"
+          }
+          port {
+            container_port = 2380
+            name           = "pd-peer"
           }
           volume_mount {
             name       = "pd-storage"
             mount_path = "/data/pd"
           }
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 2379
+            }
+            initial_delay_seconds = 5
+          }
         }
-        volume {
-          name = "pd-storage"
+      }
+    }
+    volume_claim_template {
+      metadata {
+        name = "pd-storage"
+      }
+      spec {
+        access_modes = ["ReadWriteOnce"]
+        resources {
+          requests = {
+            storage = var.pd_storage_size
+          }
         }
       }
     }
   }
 }
 
-# PD Persistent Volume Claim
-resource "kubernetes_persistent_volume_claim" "pd_pvc" {
-  metadata {
-    name      = "tikv-pd-pvc"
-    namespace = var.namespace
-  }
-  spec {
-    access_modes = ["ReadWriteOnce"]
-    resources {
-      requests = {
-        storage = var.pd_storage_size
-      }
-    }
-  }
-}
-
-# TiKV Deployment
-resource "kubernetes_deployment" "tikv" {
+# TiKV StatefulSet (unchanged for now)
+resource "kubernetes_stateful_set" "tikv" {
   metadata {
     name      = "tikv"
     namespace = var.namespace
   }
   spec {
-    replicas = var.tikv_replicas
+    service_name = "tikv"
+    replicas     = var.tikv_replicas
     selector {
       match_labels = {
         app = "tikv"
@@ -129,10 +147,19 @@ resource "kubernetes_deployment" "tikv" {
           name  = "tikv"
           image = var.tikv_image
           args  = [
-            "--pd=tikv-pd.${var.namespace}.svc.cluster.local:2379",
+            "--pd=${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2379",
             "--addr=0.0.0.0:20160",
-            "--data-dir=/data/tikv"
+            "--data-dir=/data/tikv",
+            "--advertise-addr=$(POD_NAME).${kubernetes_service.tikv_service.metadata[0].name}.${var.namespace}.svc.cluster.local:20160"
           ]
+          env {
+            name = "POD_NAME"
+            value_from {
+              field_ref {
+                field_path = "metadata.name"
+              }
+            }
+          }
           port {
             container_port = 20160
           }
@@ -141,25 +168,19 @@ resource "kubernetes_deployment" "tikv" {
             mount_path = "/data/tikv"
           }
         }
-        volume {
-          name = "tikv-storage"
-        }
       }
     }
-  }
-}
-
-# TiKV Persistent Volume Claim
-resource "kubernetes_persistent_volume_claim" "tikv_pvc" {
-  metadata {
-    name      = "tikv-pvc"
-    namespace = var.namespace
-  }
-  spec {
-    access_modes = ["ReadWriteOnce"]
-    resources {
-      requests = {
-        storage = var.tikv_storage_size
+    volume_claim_template {
+      metadata {
+        name = "tikv-storage"
+      }
+      spec {
+        access_modes = ["ReadWriteOnce"]
+        resources {
+          requests = {
+            storage = var.tikv_storage_size
+          }
+        }
       }
     }
   }
