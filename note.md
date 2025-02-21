@@ -24,7 +24,7 @@ With that said, here's how such a system *could* be architecturally structured t
         *   Configuration data for scoring rules (e.g., "points deducted for late payment," "points added for volunteer work" – again, all *simulated*).  This is important; the rules themselves are part of the data.
     *   **Graph Database (Neo4j or similar):**
         *   Relationships between citizens (family, co-workers, etc.). This *could* (ethically problematic!) be used to influence scores based on associations – a classic graph problem. For instance, you could simulate "guilt by association".
-    *  **Relational(Postgres)**: Black/White lists
+    *  **TiKV**: Black/White lists
 
 2.  **Time-Series and Columnar Data:**
 

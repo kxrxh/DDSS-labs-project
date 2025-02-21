@@ -1,83 +1,78 @@
-# Namespace
-resource "kubernetes_namespace" "tikv" {
+# modules/tikv/main.tf
+
+# Variables
+variable "namespace" {
+  description = "Kubernetes namespace for TiKV deployment"
+  type        = string
+}
+
+variable "pd_replicas" {
+  description = "Number of Placement Driver (PD) replicas"
+  type        = number
+}
+
+variable "tikv_replicas" {
+  description = "Number of TiKV replicas"
+  type        = number
+}
+
+variable "pd_image" {
+  description = "Docker image for PD"
+  type        = string
+}
+
+variable "tikv_image" {
+  description = "Docker image for TiKV"
+  type        = string
+}
+
+# Create the namespace
+resource "kubernetes_namespace" "tikv_namespace" {
   metadata {
     name = var.namespace
   }
 }
 
-# Placement Driver (PD) Service
-resource "kubernetes_service" "pd_service" {
-  metadata {
-    name      = "tikv-pd"
-    namespace = var.namespace
-  }
-  spec {
-    selector = {
-      app = "tikv-pd"
-    }
-    port {
-      name        = "pd-client"
-      port        = 2379
-      target_port = 2379
-    }
-    cluster_ip = "None" # Headless service for PD
-  }
-}
-
-# TiKV Service (unchanged)
-resource "kubernetes_service" "tikv_service" {
-  metadata {
-    name      = "tikv"
-    namespace = var.namespace
-  }
-  spec {
-    selector = {
-      app = "tikv"
-    }
-    port {
-      name        = "tikv-client"
-      port        = 20160
-      target_port = 20160
-    }
-    cluster_ip = "None" # Headless service for TiKV
-  }
-}
-
-# Placement Driver (PD) StatefulSet
+# PD StatefulSet
 resource "kubernetes_stateful_set" "pd" {
+  depends_on = [kubernetes_namespace.tikv_namespace]
+
   metadata {
-    name      = "tikv-pd"
+    name      = "pd"
     namespace = var.namespace
   }
+
   spec {
-    pod_management_policy = "Parallel"  # Allows all pods to be created concurrently
-    service_name          = "tikv-pd"
-    replicas              = var.pd_replicas
+    replicas = var.pd_replicas
+    service_name = "pd-service"
 
     selector {
       match_labels = {
-        app = "tikv-pd"
+        app = "pd"
       }
     }
+
     template {
       metadata {
         labels = {
-          app = "tikv-pd"
+          app = "pd"
         }
       }
+
       spec {
         container {
-          name  = "pd"
           image = var.pd_image
-          args  = [
+          name  = "pd"
+
+          args = [
             "--name=$(POD_NAME)",
-            "--client-urls=http://0.0.0.0:2379",  # Listen on all interfaces for clients
-            "--peer-urls=http://0.0.0.0:2380",      # Listen on all interfaces for peers
-            "--advertise-client-urls=http://$(POD_NAME).${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2379",
-            "--advertise-peer-urls=http://$(POD_NAME).${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2380",
-            "--initial-cluster=${join(",", [for i in range(var.pd_replicas) : format("tikv-pd-%d=http://tikv-pd-%d.%s.%s.svc.cluster.local:2380", i, i, kubernetes_service.pd_service.metadata[0].name, var.namespace)])}",
-            "--data-dir=/data/pd"
+            "--client-urls=http://0.0.0.0:2379",
+            "--peer-urls=http://0.0.0.0:2380",
+            "--advertise-client-urls=http://$(POD_NAME).pd-service.${var.namespace}.svc.cluster.local:2379",
+            "--advertise-peer-urls=http://$(POD_NAME).pd-service.${var.namespace}.svc.cluster.local:2380",
+            "--initial-cluster=${join(",", [for i in range(var.pd_replicas) : "pd-${i}=http://pd-${i}.pd-service.${var.namespace}.svc.cluster.local:2380"])}"
           ]
+
           env {
             name = "POD_NAME"
             value_from {
@@ -86,37 +81,12 @@ resource "kubernetes_stateful_set" "pd" {
               }
             }
           }
+
           port {
-            container_port = 2379
-            name           = "pd-client"
+            container_port = 2379  # Client port
           }
           port {
-            container_port = 2380
-            name           = "pd-peer"
-          }
-          volume_mount {
-            name       = "pd-storage"
-            mount_path = "/data/pd"
-          }
-          readiness_probe {
-            http_get {
-              path = "/health"
-              port = 2379
-            }
-            initial_delay_seconds = 5
-          }
-        }
-      }
-    }
-    volume_claim_template {
-      metadata {
-        name = "pd-storage"
-      }
-      spec {
-        access_modes = ["ReadWriteOnce"]
-        resources {
-          requests = {
-            storage = var.pd_storage_size
+            container_port = 2380  # Peer port
           }
         }
       }
@@ -124,36 +94,73 @@ resource "kubernetes_stateful_set" "pd" {
   }
 }
 
-# TiKV StatefulSet (unchanged for now)
+# PD Headless Service
+resource "kubernetes_service" "pd_service" {
+  depends_on = [kubernetes_namespace.tikv_namespace]
+
+  metadata {
+    name      = "pd-service"
+    namespace = var.namespace
+  }
+
+  spec {
+    selector = {
+      app = "pd"
+    }
+
+    port {
+      port        = 2379
+      target_port = 2379
+      name        = "client"
+    }
+
+    port {
+      port        = 2380
+      target_port = 2380
+      name        = "peer"
+    }
+
+    cluster_ip = "None"  # Headless service
+  }
+}
+
+# TiKV StatefulSet (replacing Deployment)
 resource "kubernetes_stateful_set" "tikv" {
+  depends_on = [kubernetes_namespace.tikv_namespace]
+
   metadata {
     name      = "tikv"
     namespace = var.namespace
   }
+
   spec {
-    service_name = "tikv"
-    replicas     = var.tikv_replicas
+    replicas = var.tikv_replicas
+    service_name = "tikv-service"
+
     selector {
       match_labels = {
         app = "tikv"
       }
     }
+
     template {
       metadata {
         labels = {
           app = "tikv"
         }
       }
+
       spec {
         container {
-          name  = "tikv"
           image = var.tikv_image
-          args  = [
-            "--pd=${kubernetes_service.pd_service.metadata[0].name}.${var.namespace}.svc.cluster.local:2379",
+          name  = "tikv"
+
+          args = [
             "--addr=0.0.0.0:20160",
-            "--data-dir=/data/tikv",
-            "--advertise-addr=$(POD_NAME).${kubernetes_service.tikv_service.metadata[0].name}.${var.namespace}.svc.cluster.local:20160"
+            "--advertise-addr=$(POD_NAME).tikv-service.${var.namespace}.svc.cluster.local:20160",
+            "--pd-endpoints=pd-service.${var.namespace}.svc.cluster.local:2379"
           ]
+
           env {
             name = "POD_NAME"
             value_from {
@@ -162,28 +169,36 @@ resource "kubernetes_stateful_set" "tikv" {
               }
             }
           }
+
           port {
-            container_port = 20160
-          }
-          volume_mount {
-            name       = "tikv-storage"
-            mount_path = "/data/tikv"
+            container_port = 20160  # TiKV client port
           }
         }
       }
     }
-    volume_claim_template {
-      metadata {
-        name = "tikv-storage"
-      }
-      spec {
-        access_modes = ["ReadWriteOnce"]
-        resources {
-          requests = {
-            storage = var.tikv_storage_size
-          }
-        }
-      }
+  }
+}
+
+# TiKV Headless Service
+resource "kubernetes_service" "tikv_service" {
+  depends_on = [kubernetes_namespace.tikv_namespace]
+
+  metadata {
+    name      = "tikv-service"
+    namespace = var.namespace
+  }
+
+  spec {
+    selector = {
+      app = "tikv"
     }
+
+    port {
+      port        = 20160
+      target_port = 20160
+      name        = "client"
+    }
+
+    cluster_ip = "None"  # Headless service for stable DNS
   }
 }
