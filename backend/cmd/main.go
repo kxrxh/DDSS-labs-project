@@ -1,27 +1,50 @@
 package main
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/kxrxh/ddss/internal/db"
 )
 
 func main() {
-	// Create database client with local connection strings
-	_, err := db.NewClient(db.Config{
-		// DGraph typically uses port 9080 for gRPC
+	cfg := db.Config{
 		DgraphAddr: "localhost:9080",
-		// Standard MongoDB connection string
-		MongoURI: "mongodb://localhost:27017",
-		// TiKV PD (Placement Driver) endpoint
-		TiKVAddr: []string{"localhost:2379"},
-	})
-	if err != nil {
-		log.Fatalf("Failed to create database clients: %v", err)
+		MongoURI:   "mongodb://localhost:27017",
+		TiKVAddr:   []string{"localhost:2379", "localhost:2380", "localhost:2381"},
 	}
 
-	log.Println("Successfully connected to databases")
+	client, err := db.NewClient(cfg)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	defer client.Close()
 
-	// inf wait here
+	// Add a citizen with relations
+	_, err = client.AddCitizen("citizen001", "Alice", []string{"citizen002"})
+	if err != nil {
+		fmt.Println("Error adding citizen:", err)
+	}
+
+	// Add citizen profile
+	err = client.AddCitizenProfile("citizen001", "Alice", 30, 100)
+	if err != nil {
+		fmt.Println("Error adding profile:", err)
+	}
+
+	// Blacklist someone
+	err = client.AddToBlacklist("citizen003", "Fraud detected")
+	if err != nil {
+		fmt.Println("Error blacklisting:", err)
+	}
+
+	// Check blacklist
+	isBlacklisted, reason, err := client.IsBlacklisted("citizen003")
+	if err != nil {
+		fmt.Println("Error checking blacklist:", err)
+	} else {
+		fmt.Printf("Blacklisted: %v, Reason: %s\n", isBlacklisted, reason)
+	}
+
 	select {}
 }

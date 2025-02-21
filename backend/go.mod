@@ -2,8 +2,6 @@ module github.com/kxrxh/ddss
 
 go 1.23.6
 
-require github.com/dgraph-io/dgo/v230 v230.0.1
-
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -26,6 +24,7 @@ require (
 	github.com/prometheus/common v0.39.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a // indirect
 	github.com/tikv/pd/client v0.0.0-20230329114254-1948c247c2b1 // indirect
 	github.com/twmb/murmur3 v1.1.3 // indirect
@@ -36,15 +35,13 @@ require (
 )
 
 require (
+	github.com/dgraph-io/dgo/v2 v2.2.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
-	github.com/panjf2000/ants/v2 v2.11.1 // indirect
-	github.com/panjf2000/gnet/v2 v2.7.2
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tikv/client-go/v2 v2.0.7
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect

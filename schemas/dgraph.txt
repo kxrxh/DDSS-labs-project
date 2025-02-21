@@ -1,0 +1,9 @@
+type Citizen {
+	simulated_id: string
+	name: string
+	relations: [uid] @reverse
+}
+
+simulated_id: string @index(exact) .
+name: string .
+relations: [uid] .

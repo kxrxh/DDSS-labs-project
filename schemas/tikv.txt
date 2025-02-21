@@ -1,0 +1,2 @@
+blacklist:citizen003 -> "Blocked for fraud"
+whitelist:citizen001 -> "Trusted user"
