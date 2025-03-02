@@ -99,7 +99,7 @@ func (c *Client) Close() error {
 	var errs []error
 
 	if c.doc != nil {
-		if err := c.doc.Disconnect(nil); err != nil {
+		if err := c.doc.Disconnect(context.Background()); err != nil {
 			errs = append(errs, fmt.Errorf("failed to disconnect MongoDB: %v", err))
 		}
 	}

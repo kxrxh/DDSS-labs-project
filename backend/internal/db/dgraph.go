@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// go:embed internal/db/schema.dgraph
+//go:embed schema.dgraph
 var embeded embed.FS
 
 // DgraphClient wraps the Dgraph client
@@ -24,7 +24,7 @@ type DgraphClient struct {
 
 // NewDgraphClient initializes a Dgraph client
 func NewDgraphClient(addr string) (*DgraphClient, error) {
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial dgraph at %s: %w", addr, err)
 	}
@@ -33,14 +33,14 @@ func NewDgraphClient(addr string) (*DgraphClient, error) {
 
 // SetupDgraphSchema sets up the Dgraph schema for the Social Credit System
 func (c *Client) SetupDgraphSchema() error {
-	conn, err := grpc.Dial(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to Dgraph: %w", err)
 	}
 	defer conn.Close()
 
 	dc := dgo.NewDgraphClient(api.NewDgraphClient(conn))
-	schema, err := embeded.ReadFile("internal/db/schema.dgraph")
+	schema, err := embeded.ReadFile("schema.dgraph")
 	if err != nil {
 		return fmt.Errorf("failed to read schema: %w", err)
 	}
@@ -57,7 +57,7 @@ func (c *Client) SetupDgraphSchema() error {
 
 // CreateSocialRelationship creates a relationship between two citizens in the graph
 func (c *Client) CreateSocialRelationship(relationship models.GraphRelationship) error {
-	conn, err := grpc.Dial(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to Dgraph: %w", err)
 	}
@@ -144,7 +144,7 @@ func (c *Client) CreateSocialRelationship(relationship models.GraphRelationship)
 
 // RecordActivity records a citizen activity in the graph
 func (c *Client) RecordActivity(activity models.GraphActivity) error {
-	conn, err := grpc.Dial(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to Dgraph: %w", err)
 	}
@@ -283,7 +283,7 @@ func (c *Client) RecordActivity(activity models.GraphActivity) error {
 
 // GetCitizenRelationships retrieves all relationships for a given citizen
 func (c *Client) GetCitizenRelationships(citizenID string) ([]models.GraphRelationshipView, error) {
-	conn, err := grpc.Dial(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Dgraph: %w", err)
 	}
@@ -391,7 +391,7 @@ func (c *Client) GetCitizenRelationships(citizenID string) ([]models.GraphRelati
 
 // GetSocialConnectionPath finds connection paths between two citizens in the social graph
 func (c *Client) GetSocialConnectionPath(fromID, toID string, maxDepth int) ([]models.GraphSocialPath, error) {
-	conn, err := grpc.Dial(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Dgraph: %w", err)
 	}
@@ -491,7 +491,7 @@ func (c *Client) GetSocialConnectionPath(fromID, toID string, maxDepth int) ([]m
 
 // IdentifyInfluentialNodes identifies the most influential citizens in the social graph
 func (c *Client) IdentifyInfluentialNodes(limit int) ([]models.GraphInfluentialCitizen, error) {
-	conn, err := grpc.Dial(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(c.dgraphAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Dgraph: %w", err)
 	}
