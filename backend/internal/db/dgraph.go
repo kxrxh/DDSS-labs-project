@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-//go:embed schema.dgraph
+//go:embed schema.graphqls
 var embeded embed.FS
 
 // DgraphClient wraps the Dgraph client
@@ -40,7 +40,7 @@ func (c *Client) SetupDgraphSchema() error {
 	defer conn.Close()
 
 	dc := dgo.NewDgraphClient(api.NewDgraphClient(conn))
-	schema, err := embeded.ReadFile("schema.dgraph")
+	schema, err := embeded.ReadFile("schema.graphqls")
 	if err != nil {
 		return fmt.Errorf("failed to read schema: %w", err)
 	}

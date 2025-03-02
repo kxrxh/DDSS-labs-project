@@ -64,6 +64,7 @@ func (s *Server) setupRoutes() {
 	citizens.Get("/:id", s.getCitizen)
 	citizens.Post("/", s.createCitizen)
 	citizens.Put("/:id", s.updateCitizen)
+	citizens.Delete("/:id", s.deleteCitizen)
 
 	// Blacklist endpoints
 	blacklist := api.Group("/blacklist")

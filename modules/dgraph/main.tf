@@ -175,3 +175,69 @@ resource "kubernetes_service" "dgraph_alpha" {
     }
   }
 }
+
+# Deploy Ratel Dashboard
+resource "kubernetes_deployment" "dgraph_ratel" {
+  metadata {
+    name      = "dgraph-ratel"
+    namespace = var.namespace
+  }
+  spec {
+    replicas = var.ratel_replicas
+    selector {
+      match_labels = {
+        app = "dgraph-ratel"
+      }
+    }
+    template {
+      metadata {
+        labels = {
+          app = "dgraph-ratel"
+        }
+      }
+      spec {
+        container {
+          name  = "dgraph-ratel"
+          image = var.dgraph_ratel_image
+          
+          port {
+            container_port = 8000
+            name           = "http"
+          }
+          
+          resources {
+            limits = {
+              cpu    = var.ratel_cpu_limit
+              memory = var.ratel_memory_limit
+            }
+            requests = {
+              cpu    = var.ratel_cpu_request
+              memory = var.ratel_memory_request
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "dgraph_ratel" {
+  metadata {
+    name      = "dgraph-ratel"
+    namespace = var.namespace
+    labels = {
+      app = "dgraph-ratel"
+    }
+  }
+  spec {
+    port {
+      port        = 8000
+      target_port = "http"
+      name        = "http"
+    }
+    selector = {
+      app = "dgraph-ratel"
+    }
+    type = var.ratel_service_type
+  }
+}

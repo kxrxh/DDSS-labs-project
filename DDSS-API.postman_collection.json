@@ -376,7 +376,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"rule_id\": \"R001\",\n    \"title\": \"Curfew\",\n    \"description\": \"All citizens must be in their residence between 22:00 and 05:00\",\n    \"punishment_tier\": 2,\n    \"applicable_zones\": [\"Z001\", \"Z002\"],\n    \"applicable_citizen_tiers\": [\"TIER1\", \"TIER2\", \"TIER3\"],\n    \"is_active\": true\n}",
+							"raw": "{\n    \"RuleID\": \"\",\n    \"Name\": \"Curfew Regulation\",\n    \"Description\": \"All citizens must be in their residence between 22:00 and 05:00\",\n    \"Category\": \"Movement\",\n    \"Subcategory\": \"Curfew\",\n    \"PointImpact\": {\n        \"BaseValue\": -50,\n        \"MultiplierFactors\": [\n            {\n                \"FactorName\": \"repeat_offense\",\n                \"Threshold\": 2.0,\n                \"Multiplier\": 1.5\n            },\n            {\n                \"FactorName\": \"public_influence\",\n                \"Threshold\": 1000.0,\n                \"Multiplier\": 2.0\n            }\n        ],\n        \"MaxImpact\": -200\n    },\n    \"Conditions\": {\n        \"Prerequisites\": [\"adult\", \"non-essential\"],\n        \"Exclusions\": [\"medical\", \"security\"]\n    },\n    \"Enforcement\": {\n        \"Automatic\": true,\n        \"RequiresReview\": false,\n        \"ReviewLevel\": 0\n    },\n    \"Metadata\": {\n        \"CreatedAt\": \"0001-01-01T00:00:00Z\",\n        \"ModifiedAt\": \"0001-01-01T00:00:00Z\",\n        \"Version\": \"1.0\",\n        \"Active\": true\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"

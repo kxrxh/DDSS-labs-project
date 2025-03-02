@@ -247,6 +247,28 @@ func (c *Client) GetRuleByID(ruleID string) (*models.Rule, error) {
 	return &rule, nil
 }
 
+// GetAllRules retrieves all rules with optional filtering
+func (c *Client) GetAllRules(query bson.M, limit int) ([]models.Rule, error) {
+	ctx := context.Background()
+	collection := c.doc.Database(dbName).Collection(rulesCollName)
+
+	findOptions := options.Find()
+	findOptions.SetLimit(int64(limit))
+
+	cursor, err := collection.Find(ctx, query, findOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find rules: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var rules []models.Rule
+	if err = cursor.All(ctx, &rules); err != nil {
+		return nil, fmt.Errorf("failed to decode rules: %w", err)
+	}
+
+	return rules, nil
+}
+
 // SearchCitizens searches for citizens based on various criteria
 func (c *Client) SearchCitizens(query bson.M, limit int) ([]models.Citizen, error) {
 	ctx := context.Background()
@@ -293,4 +315,22 @@ func (c *Client) GetCitizenTransactions(simulatedID string, limit int) ([]models
 	}
 
 	return transactions, nil
+}
+
+// DeleteCitizen removes a citizen from the database by ID
+func (c *Client) DeleteCitizen(citizenID string) error {
+	ctx := context.Background()
+	collection := c.doc.Database(dbName).Collection(citizenCollName)
+
+	filter := bson.M{"simulated_id": citizenID}
+	result, err := collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("failed to delete citizen: %w", err)
+	}
+
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("no citizen found with ID %s", citizenID)
+	}
+
+	return nil
 }

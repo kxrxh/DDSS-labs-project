@@ -51,8 +51,17 @@ func (s *Server) createCitizen(c *fiber.Ctx) error {
 		return sendErrorJSON(c, fiber.StatusBadRequest, "Invalid citizen data: "+err.Error())
 	}
 
+	// Generate a SimulatedID if not provided
+	if citizen.SimulatedID == "" {
+		// Generate a simple ID using the current timestamp and a random component
+		// This is a simple approach - in production, use a proper UUID library
+		timeComponent := strconv.FormatInt(time.Now().UnixNano(), 10)
+		randomComponent := strconv.Itoa(int(time.Now().Unix() % 10000))
+		citizen.SimulatedID = "CIT-" + timeComponent[len(timeComponent)-6:] + "-" + randomComponent
+	}
+
 	// Add the citizen to MongoDB
-	err := s.client.UpdateCitizenProfile(citizen)
+	err := s.client.AddCitizenProfile(citizen)
 	if err != nil {
 		return sendErrorJSON(c, fiber.StatusInternalServerError, "Failed to add citizen: "+err.Error())
 	}
@@ -82,6 +91,21 @@ func (s *Server) updateCitizen(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status": "updated",
+	})
+}
+
+// deleteCitizen handles DELETE /api/citizens/:id
+func (s *Server) deleteCitizen(c *fiber.Ctx) error {
+	citizenID := c.Params("id")
+
+	// Delete the citizen from the database
+	err := s.client.DeleteCitizen(citizenID)
+	if err != nil {
+		return sendErrorJSON(c, fiber.StatusInternalServerError, "Failed to delete citizen: "+err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status": "deleted",
 	})
 }
 
@@ -245,8 +269,22 @@ func (s *Server) createRelationship(c *fiber.Ctx) error {
 
 // getAllRules handles GET /api/rules
 func (s *Server) getAllRules(c *fiber.Ctx) error {
-	// In the original implementation, this was not implemented
-	return sendErrorJSON(c, fiber.StatusNotImplemented, "Getting all rules not implemented")
+	query := make(bson.M)
+	limit := 100 // Default limit
+
+	// Parse query parameters for filtering
+	if c.Query("limit") != "" {
+		if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	rules, err := s.client.GetAllRules(query, limit)
+	if err != nil {
+		return sendErrorJSON(c, fiber.StatusInternalServerError, "Failed to retrieve rules: "+err.Error())
+	}
+
+	return c.Status(fiber.StatusOK).JSON(rules)
 }
 
 // getRule handles GET /api/rules/:id
@@ -267,6 +305,14 @@ func (s *Server) createRule(c *fiber.Ctx) error {
 
 	if err := c.BodyParser(&rule); err != nil {
 		return sendErrorJSON(c, fiber.StatusBadRequest, "Invalid rule data: "+err.Error())
+	}
+
+	// Generate a RuleID if not provided
+	if rule.RuleID == "" {
+		// Generate a simple ID using the current timestamp and a random component
+		timeComponent := strconv.FormatInt(time.Now().UnixNano(), 10)
+		randomComponent := strconv.Itoa(int(time.Now().Unix() % 10000))
+		rule.RuleID = "RULE-" + timeComponent[len(timeComponent)-6:] + "-" + randomComponent
 	}
 
 	err := s.client.AddRule(rule)
