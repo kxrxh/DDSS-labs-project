@@ -14,7 +14,7 @@ provider "kubernetes" {
 module "mongodb" {
   source       = "../../modules/mongodb"
   namespace    = "mongodb-dev"
-  replicas     = 3          # Reduced to standard HA
+  replicas     = 1          # Reduced to standard HA
   storage_size = "10Gi"    # Increased for realistic data
   mongo_image  = "mongo:latest"
 }
@@ -22,8 +22,8 @@ module "mongodb" {
 module "dgraph" {
   source             = "../../modules/dgraph"
   namespace          = "dgraph-dev"
-  zero_replicas      = 3    # Reduced to standard HA
-  alpha_replicas     = 3    # Start with 3, scale if needed
+  zero_replicas      = 1    # Reduced to standard HA
+  alpha_replicas     = 1    # Start with 3, scale if needed
   zero_storage_size  = "2Gi" 
   alpha_storage_size = "2Gi" # Increased for data
 }
@@ -31,8 +31,8 @@ module "dgraph" {
 module "tikv" {
   source        = "../../modules/tikv"
   namespace     = "tikv-dev"
-  pd_replicas   = 3     # Reduced to standard HA
-  tikv_replicas = 3     # Start with 3, scale if needed
+  pd_replicas   = 1     # Reduced to standard HA
+  tikv_replicas = 1     # Start with 3, scale if needed
   pd_image      = "pingcap/pd:latest"
   tikv_image    = "pingcap/tikv:latest"
 }

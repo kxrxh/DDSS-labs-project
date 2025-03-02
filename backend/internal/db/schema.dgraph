@@ -1,0 +1,534 @@
+
+# Citizen type definition
+			type Citizen {
+				simulatedID: String! @id
+				name: String
+				governmentID: String @search(term)
+				creditProfile: CreditProfile
+				demographics: Demographics
+				relationshipEdges: [Relationship]
+				workplaceEdges: [WorksAt]
+				residenceEdges: [ResidentOf]
+				activities: [Activity]
+				surveillanceData: [Surveillance]
+				biometricData: [BiometricRecord]
+			}
+
+			# Credit Profile
+			type CreditProfile {
+				currentScore: Int
+				scoreTrajectory: String
+				tierClassification: String
+				lastUpdated: DateTime
+				scoreHistory: [ScoreEntry]
+				highestEverScore: Int
+				lowestEverScore: Int
+				averageYearlyChange: Float
+				scoreVolatility: Float
+				creditLimit: Float
+				trustLevel: Int
+			}
+
+			# Score Entry for history tracking
+			type ScoreEntry {
+				date: DateTime
+				score: Int
+				change: Int
+				reason: String
+				source: String
+				verifiedBy: String
+			}
+
+			# Demographics information
+			type Demographics {
+				dateOfBirth: DateTime
+				ethnicBackground: String
+				gender: String
+				maritalStatus: String
+				numberOfDependents: Int
+				registeredDisabilities: [String]
+				educationLevel: String
+				languages: [String]
+				religion: String
+				birthplace: String
+				nationality: String
+				politicalAffiliation: String
+			}
+
+			# Social relationships between citizens
+			type Relationship @edge {
+				from: Citizen!
+				to: Citizen!
+				relationshipType: String @search
+				trust: Float
+				influence: Float
+				startDate: DateTime
+				endDate: DateTime
+				interactions: Int
+				lastInteraction: DateTime
+				strengthScore: Float
+				communicationFrequency: Float
+				metadata: String
+				isPrimary: Boolean
+				isReported: Boolean
+				monitoringLevel: Int
+				flagged: Boolean
+				reportCount: Int
+			}
+
+			# Workplace relationships
+			type WorksAt @edge {
+				employee: Citizen!
+				employer: Organization!
+				position: String
+				startDate: DateTime
+				endDate: DateTime
+				performanceRating: Float
+				loyaltyScore: Float
+				incidentReports: Int
+				compensationTier: Int
+				securityClearance: String
+				departmentCode: String
+				supervisorID: String
+				isMonitored: Boolean
+			}
+
+			# Organizations (workplaces, schools, etc.)
+			type Organization {
+				orgID: String! @id
+				name: String @search(term)
+				type: String
+				socialCreditRating: Float
+				complianceLevel: Int
+				employeeCount: Int
+				location: Location
+				industry: String
+				stateOwned: Boolean
+				securityLevel: Int
+				monitoringIntensity: Float
+				lastAudit: DateTime
+				foundedDate: DateTime
+				registrationStatus: String
+				certifications: [String]
+			}
+
+			# Residence relationships
+			type ResidentOf @edge {
+				resident: Citizen!
+				residence: Location!
+				startDate: DateTime
+				endDate: DateTime
+				residenceType: String
+				registrationStatus: String
+				monthlyPayment: Float
+				isMonitored: Boolean
+				permissionLevel: Int
+				entranceCount: Int
+				exitCount: Int
+				avgTimeSpent: Float
+				nocturnalActivity: Float
+				visitorCount: Int
+				unusualActivityReports: Int
+			}
+
+			# Locations (homes, workplaces, venues)
+			type Location {
+				locationID: String! @id
+				address: String @search(term)
+				coordinates: GeoCoordinates
+				type: String
+				securityRating: Int
+				surveillanceLevel: Int
+				permittedCitizens: [String]
+				restrictedCitizens: [String]
+				ownershipType: String
+				monitoredEntryPoints: Int
+				lastInspection: DateTime
+				facilityStatus: String
+				capacityLimit: Int
+				currentOccupants: Int
+				suspiciousActivityReports: Int
+			}
+
+			# Geo coordinates
+			type GeoCoordinates {
+				latitude: Float
+				longitude: Float
+				accuracy: Float
+				timestamp: DateTime
+				source: String
+			}
+
+			# Activities and behaviors
+			type Activity {
+				activityID: String! @id
+				citizenID: String!
+				type: String @search
+				timestamp: DateTime
+				location: Location
+				associatedCitizens: [String]
+				description: String
+				scoreImpact: Int
+				verificationStatus: String
+				evidenceReferences: [String]
+				confidenceScore: Float
+				reportSource: String
+				classification: String
+				responseRequired: Boolean
+				isAnalyzed: Boolean
+				analysisResults: String
+				behavioralFlags: [String]
+				attachments: [String]
+			}
+
+			# Surveillance records
+			type Surveillance {
+				surveillanceID: String! @id
+				citizenID: String!
+				timestamp: DateTime
+				endTimestamp: DateTime
+				locationType: String
+				coordinates: GeoCoordinates
+				surveillanceType: String
+				deviceID: String
+				operator: String
+				triggerReason: String
+				findings: String
+				flagged: Boolean
+				evidenceURL: [String]
+				facialMatchConfidence: Float
+				behaviorsDetected: [String]
+				emotionReadings: [EmotionReading]
+				associatedCitizens: [String]
+				priorityLevel: Int
+				authorizedBy: String
+				retentionPeriod: Int
+				accessLog: [String]
+			}
+
+			# Emotion reading for surveillance
+			type EmotionReading {
+				timestamp: DateTime
+				primaryEmotion: String
+				intensity: Float
+				context: String
+				machineConfidence: Float
+				humanVerified: Boolean
+				trigger: String
+				duration: Float
+				relatedEmotions: [String]
+			}
+
+			# Ideological profile
+			type IdeologicalProfile {
+				citizenID: String! @id
+				loyaltyScore: Float
+				ideologicalPurity: Float
+				thoughtPatternAnalysis: String
+				valuedPrinciples: [String]
+				rejectedPrinciples: [String]
+				educationResponsiveness: Float
+				susceptibilityToReform: Float
+				publicallyExpressedViews: [String]
+				privateExpressedViews: [String]
+				consistencyScore: Float
+				alignmentTrajectory: String
+				reeducationHistory: [ReeducationEntry]
+				recommendedMaterials: [String]
+				ideologicalInfluencers: [String]
+				flaggedConcepts: [String]
+				lastAssessment: DateTime
+				assessmentFrequency: Int
+				manualOverrides: [String]
+			}
+
+			# Reeducation program entries
+			type ReeducationEntry {
+				programID: String
+				startDate: DateTime
+				endDate: DateTime
+				programType: String
+				completionStatus: String
+				performanceEvaluation: Float
+				attitudeAssessment: Float
+				educatorNotes: String
+				materialsCovered: [String]
+				testResults: [Float]
+				behavioralChangeMeasure: Float
+				followUpScheduled: DateTime
+				recommendedActions: [String]
+			}
+
+			# Financial data
+			type FinancialData {
+				citizenID: String! @id
+				incomeLevel: Float
+				debtLevel: Float
+				savingsScore: Float
+				financialRiskRating: Float
+				taxComplianceScore: Float
+				paymentHistoryScore: Float
+				propertyOwnership: [String]
+				investmentTypes: [String]
+				consumptionPatternScore: Float
+				financialDependents: Int
+				luxurySpendingScore: Float
+				financialStabilityScore: Float
+				unauthorizedTransactions: [String]
+				specialFinancialStatus: String
+				accountFreezeHistory: [DateTime]
+				financialRestrictions: [String]
+				lastFinancialReview: DateTime
+			}
+
+			# Device data
+			type Device {
+				deviceID: String! @id
+				citizenID: String!
+				deviceType: String
+				manufacturer: String
+				model: String
+				registrationDate: DateTime
+				lastActivity: DateTime
+				firmwareVersion: String
+				complianceStatus: String
+				monitoringLevel: Int
+				locationTrackingEnabled: Boolean
+				remoteAccessEnabled: Boolean
+				encryptionLevel: String
+				screenTimeAverage: Float
+				applicationUsagePatterns: [AppUsage]
+				networkConnections: [String]
+				suspiciousActivityCount: Int
+				lastInspectionDate: DateTime
+				inspectionResult: String
+				registrationStatus: String
+			}
+
+			# App usage patterns
+			type AppUsage {
+				appName: String
+				categoryType: String
+				usageFrequency: Float
+				averageDuration: Float
+				lastUsed: DateTime
+				permissionLevel: String
+				dataConsumption: Float
+				contentAccessPattern: String
+				flaggedActivity: Boolean
+				socialInteractions: Int
+				contentCreation: Float
+				contentConsumption: Float
+			}
+
+			# Biometric data
+			type BiometricRecord {
+				citizenID: String! @id
+				facialRecognitionData: String
+				fingerprintData: [String]
+				voiceprintData: String
+				dnaProfile: String
+				gaitAnalysis: String
+				biometricVerificationScore: Float
+				lastVerificationDate: DateTime
+				verificationLocations: [String]
+				biometricAnomalies: [String]
+				medicalImpactsOnBiometrics: [String]
+				biometricChangeHistory: [BiometricChange]
+				enrollmentDate: DateTime
+				retentionPeriod: Int
+				accessLog: [String]
+				biometricSecurityLevel: Int
+			}
+
+			# Biometric changes
+			type BiometricChange {
+				changeDate: DateTime
+				changeType: String
+				beforeHash: String
+				afterHash: String
+				changeCause: String
+				approvedBy: String
+				verificationMethod: String
+			}
+
+			# Compliance records
+			type ComplianceRecord {
+				recordID: String! @id
+				citizenID: String!
+				complianceType: String
+				timestamp: DateTime
+				status: String
+				details: String
+				scoreImpact: Int
+				enforcementActions: [String]
+				verificationMethod: String
+				evidenceReferences: [String]
+				relatedRegulations: [String]
+				reportingEntity: String
+				appealStatus: String
+				remediationDeadline: DateTime
+				remediationStatus: String
+				complianceOfficer: String
+				reviewLevel: Int
+				isDisputed: Boolean
+			}
+
+			# Travel records
+			type TravelRecord {
+				recordID: String! @id
+				citizenID: String!
+				departureDate: DateTime
+				returnDate: DateTime
+				origin: String
+				destination: String
+				travelPurpose: String
+				authorizedBy: String
+				travelCompanions: [String]
+				transportationMode: String
+				accommodationDetails: String
+				preApprovalStatus: String
+				postTravelReview: String
+				monitoringDuringTravel: Boolean
+				travelRestrictions: [String]
+				irregularities: [String]
+				scoreImpact: Int
+				borderControlNotes: String
+				travelCategory: String
+			}
+
+			# Education records
+			type EducationRecord {
+				recordID: String! @id
+				citizenID: String!
+				institutionName: String
+				institutionType: String
+				startDate: DateTime
+				endDate: DateTime
+				degreeObtained: String
+				fieldOfStudy: String
+				performanceMetrics: Float
+				ideologicalEducationHours: Int
+				conductAssessment: String
+				extracurricularActivities: [String]
+				teacherAssessments: [String]
+				specialRecognitions: [String]
+				complianceIncidents: [String]
+				educationVerified: Boolean
+				stateApproved: Boolean
+				continuingEducationStatus: String
+			}
+
+			# Medical history
+			type MedicalHistory {
+				citizenID: String! @id
+				physicalHealthScore: Float
+				mentalHealthScore: Float
+				chronicConditions: [String]
+				requiredMedications: [String]
+				treatmentCompliance: Float
+				substanceUseHistory: [String]
+				geneticRiskFactors: [String]
+				immunizationStatus: String
+				lastPhysicalExam: DateTime
+				lastMentalEvaluation: DateTime
+				medicalExemptions: [String]
+				stateProvidedTreatments: [String]
+				medicalTrustScore: Float
+				reproductiveStatus: String
+				familyMedicalHistory: [String]
+				healthInsuranceTier: Int
+				specialMedicalStatus: String
+			}
+
+			# Consumption patterns
+			type ConsumptionRecord {
+				recordID: String! @id
+				citizenID: String!
+				timestamp: DateTime
+				productType: String
+				productName: String
+				productCategory: String
+				vendorName: String
+				vendorID: String
+				quantity: Float
+				totalSpending: Float
+				paymentMethod: String
+				necessityScore: Float
+				nationalBrandScore: Float
+				environmentalImpactScore: Float
+				productPreferenceCategory: String
+				consumptionFrequency: String
+				authenticityVerified: Boolean
+				relatedAdvertisingExposure: Int
+				specialAuthorization: Boolean
+			}
+
+			# Media consumption
+			type MediaConsumptionRecord {
+				recordID: String! @id
+				citizenID: String!
+				timestamp: DateTime
+				mediaType: String
+				contentTitle: String
+				contentSource: String
+				contentClassification: String
+				durationMinutes: Int
+				completionPercentage: Float
+				reactionMetrics: String
+				engagementScore: Float
+				shareActivity: Boolean
+				commentActivity: Boolean
+				sentimentAnalysis: Float
+				contentKeywords: [String]
+				ideologicalAlignment: Float
+				flaggedForContent: Boolean
+				recommendationSource: String
+				deviceUsed: String
+				locationDuringConsumption: String
+			}
+
+			# Public statements
+			type PublicStatement {
+				statementID: String! @id
+				citizenID: String!
+				timestamp: DateTime
+				platform: String
+				content: String
+				audience: String
+				reach: Int
+				sentiment: Float
+				ideologicalAlignment: Float
+				keyTopics: [String]
+				flaggedKeywords: [String]
+				reactions: [String]
+				verificationStatus: String
+				impactScore: Float
+				officialResponse: String
+				publicationStatus: String
+				reviewStatus: String
+				reviewedBy: String
+				reviewNotes: String
+			}
+
+			# Schema directives and indexes
+			simulatedID: string @index(exact) .
+			governmentID: string @index(term) .
+			name: string @index(term) .
+			relationshipType: string @index(term) .
+			type: string @index(term) .
+			address: string @index(term) .
+			orgID: string @index(exact) .
+			deviceID: string @index(exact) .
+			citizenID: string @index(exact) .
+			activityID: string @index(exact) .
+			surveillanceID: string @index(exact) .
+			recordID: string @index(exact) .
+
+			# Edge definitions
+			hasRelationship: uid @reverse .
+			worksAt: uid @reverse .
+			residentOf: uid @reverse .
+			performs: uid @reverse .
+			undergoes: uid @reverse .
+		
