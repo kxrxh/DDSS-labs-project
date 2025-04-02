@@ -1,0 +1,125 @@
+// Коллекция: citizens
+{
+  _id: ObjectId,
+  nationalID: String,        // Уникальный ID гражданина
+  dgraphID: String,          // Ссылка на ID в Dgraph для связи баз данных
+  profile: {
+    name: String,
+    birthDate: Date,
+    gender: String,
+    occupation: String,
+    education: String,
+    maritalStatus: String,
+    income: Number
+  },
+  scoreSnapshot: {
+    currentScore: Number,
+    tier: String,           // "Образцовый", "Обычный", "Тревожный", "Неблагонадежный"
+    lastCalculated: Date
+  },
+  contactInfo: {
+    address: String,
+    phone: String,
+    email: String
+  },
+  flags: {                  // Метки, влияющие на расчет баллов
+    isPublicOfficial: Boolean,
+    hasFinancialViolations: Boolean,
+    isUnderInvestigation: Boolean
+  },
+  metadata: {
+    createdAt: Date,
+    updatedAt: Date,
+    dataVersion: Number
+  }
+}
+
+// Коллекция: scoring_rules
+{
+  _id: ObjectId,
+  ruleID: String,            // Уникальный идентификатор правила
+  name: String,              // Понятное название правила
+  category: String,          // Категория (финансы, соц. поведение, онлайн-активность и т.д.)
+  eventType: String,         // Тип события, к которому применяется правило
+  condition: {               // Условие для срабатывания правила
+    field: String,
+    operator: String,        // "equals", "greater_than", "less_than", "contains", и т.д.
+    value: Mixed,
+    additionalFilters: [     // Дополнительные фильтры
+      {
+        field: String,
+        operator: String,
+        value: Mixed
+      }
+    ]
+  },
+  points: Number,            // Положительное или отрицательное число баллов
+  multipliers: [             // Множители, которые могут изменить количество баллов
+    {
+      condition: {
+        field: String,
+        operator: String,
+        value: Mixed
+      },
+      factor: Number
+    }
+  ],
+  associationEffect: {       // Влияние на связанных граждан (семья, коллеги и т.д.)
+    enabled: Boolean,
+    relationTypes: [String], // Типы отношений, на которые влияет
+    pointsFactor: Number,    // Множитель баллов (обычно меньше 1)
+    maxDepth: Number         // Максимальная глубина в графе отношений
+  },
+  cooldown: {                // Ограничения на частоту применения правила
+    period: Number,
+    unit: String,            // "hours", "days", "weeks"
+    maxApplications: Number
+  },
+  active: Boolean,           // Активно ли правило в данный момент
+  validityPeriod: {          // Период действия правила
+    startDate: Date,
+    endDate: Date
+  },
+  metadata: {
+    createdAt: Date,
+    updatedAt: Date,
+    createdBy: String,
+    version: Number
+  }
+}
+
+// Коллекция: rule_configurations
+{
+  _id: ObjectId,
+  configID: String,
+  name: String,
+  description: String,
+  ruleGroups: [
+    {
+      groupName: String,
+      rules: [String],      // Массив ruleID из коллекции scoring_rules
+      weightMultiplier: Number
+    }
+  ],
+  baselineScore: Number,     // Начальное значение баллов для нового гражданина
+  tierThresholds: {          // Пороговые значения для каждого уровня
+    excellent: Number,
+    standard: Number,
+    concerning: Number,
+    untrusted: Number
+  },
+  decayRules: {              // Правила "забывания" со временем
+    enabled: Boolean,
+    halfLifePeriod: Number,
+    halfLifeUnit: String,   // "days", "weeks", "months"
+    minimumDecay: Number    // Минимальный процент забывания
+  },
+  active: Boolean,
+  metadata: {
+    activeFrom: Date,
+    activeTo: Date,
+    createdAt: Date,
+    updatedAt: Date,
+    version: Number
+  }
+} 

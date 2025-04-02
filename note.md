@@ -19,19 +19,18 @@ With that said, here's how such a system *could* be architecturally structured t
 
 1.  **Core Data:**
 
-    *   **Document Database (MongoDB or similar):**
+    *   **Document Database (MongoDB):**
         *   Citizen profiles (simulated ID, demographic data – *all fake*).
         *   Configuration data for scoring rules (e.g., "points deducted for late payment," "points added for volunteer work" – again, all *simulated*).  This is important; the rules themselves are part of the data.
-    *   **Graph Database (Neo4j or similar):**
+    *   **Graph Database (Dgraph):**
         *   Relationships between citizens (family, co-workers, etc.). This *could* (ethically problematic!) be used to influence scores based on associations – a classic graph problem. For instance, you could simulate "guilt by association".
-    *  **TiKV**: Black/White lists
 
 2.  **Time-Series and Columnar Data:**
 
-    *   **Timeseries Database (InfluxDB, TimescaleDB):**
+    *   **Timeseries Database (TimescaleDB):**
         *   Timestamped events that affect scores: financial transactions, "social behavior" incidents, online activities, etc. – *all simulated*.  Crucially, this is the *raw data* before it affects the score.
         *   Score changes over time (historical score tracking).
-    *   **Columnar Database (Cassandra, ScyllaDB, ClickHouse):**
+    *   **Columnar Database (ClickHouse):**
         *   Aggregated data: average scores by region, demographic group, etc.
         *   Long-term storage of event data for analysis and auditing (simulated auditing, of course).
         *   Could also store pre-calculated risk assessments or categorizations.

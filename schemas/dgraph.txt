@@ -1,318 +1,43 @@
-# Dgraph Schema for Social Credit Graph Database
-
 type Citizen {
-	simulated_id: string! @id
-	name: string
-	birthdate: datetime
-	gender: string
-	national_id: string
-	biometric_identifiers: [BiometricIdentifier] @hasInverse(field: citizen)
-	surveillance_profile: SurveillanceProfile @hasInverse(field: citizen)
-	current_score: int
-	tier: string
-	residence: Location
-	employment: [Employment]
-	education: [Education]
-	relationships: [Relationship] @hasInverse(field: participants)
-	socialGroups: [SocialGroup] @hasInverse(field: members)
-	transactions: [Transaction] @hasInverse(field: citizen)
-	flags: [Flag] @hasInverse(field: citizens)
-	influenceScore: float
-	behavioralPatterns: [BehavioralPattern] @hasInverse(field: citizen)
-	travelHistory: [TravelEvent] @hasInverse(field: citizen)
-	digitalFootprint: DigitalFootprint @hasInverse(field: citizen)
-	consumptionProfile: ConsumptionProfile @hasInverse(field: citizen)
-	ideologicalAlignment: IdeologicalProfile @hasInverse(field: citizen)
-	complianceHistory: ComplianceHistory @hasInverse(field: citizen)
+  id: ID!
+  name: String! @search(by: [exact, term])
+  nationalID: String! @search(by: [exact])
+  currentScore: Int
+  scoreHistory: [ScoreChange]
+  family: [Citizen] @hasInverse(field: family)
+  colleagues: [Citizen] @hasInverse(field: colleagues)
+  friends: [Citizen] @hasInverse(field: friends)
+  location: GeoLocation
+  associationRiskFactor: Float
+  lastUpdated: DateTime
 }
 
-type Location {
-	id: string! @id
-	address: string
-	city: string
-	province: string
-	country: string
-	postal_code: string
-	coordinates: geo
-	reputation_score: float
-	citizens: [Citizen] @hasInverse(field: residence)
-	surveillance_level: int
-	restricted_access: boolean
-	access_requirements: [string]
-	typical_visitors: [Citizen]
-	last_security_incident: datetime
-	reputation_category: string
-	excluded_citizens: [Citizen] @hasInverse(field: exclusion_zones)
-	permitted_citizens: [Citizen] @hasInverse(field: permitted_zones)
+type ScoreChange {
+  id: ID!
+  timestamp: DateTime!
+  oldScore: Int!
+  newScore: Int!
+  changeAmount: Int!
+  reason: String
+  relatedEvent: EventID
 }
 
-type Employment {
-	id: string! @id
-	employer: string
-	position: string
-	start_date: datetime
-	end_date: datetime
-	verification_status: string
-	compliance_score: float
-	employee: Citizen @hasInverse(field: employment)
+type GeoLocation {
+  id: ID!
+  region: String @search(by: [exact, term])
+  city: String @search(by: [exact, term])
+  district: String @search(by: [exact])
+  coordinates: Point
 }
 
-type Education {
-	id: string! @id
-	institution: string
-	degree: string
-	field: string
-	start_date: datetime
-	end_date: datetime
-	verification_status: string
-	academic_score: float
-	student: Citizen @hasInverse(field: education)
+type EventID {
+  id: ID!
+  sourceSystem: String!
+  eventType: String! @search(by: [exact])
+  externalID: String!
 }
 
-type Relationship {
-	id: string! @id
-	type: string                 # family, friend, colleague, etc.
-	strength: float              # 0.0-1.0 indicating relationship strength
-	start_date: datetime
-	status: string               # active, inactive, suspended
-	trust_score: float           # calculated trust between participants
-	mutual_influence: float
-	participants: [Citizen] @hasInverse(field: relationships)
+# Директивы для геоданных
+type Point @extends {
+  point: Point @index(point)
 }
-
-type SocialGroup {
-	id: string! @id
-	name: string
-	type: string                 # community, organization, club, etc.
-	formation_date: datetime
-	status: string               # active, inactive, suspended
-	reputation_score: float
-	influence_radius: float
-	members: [Citizen] @hasInverse(field: socialGroups)
-	parent_group: SocialGroup
-	subgroups: [SocialGroup] @hasInverse(field: parent_group)
-}
-
-type Transaction {
-	id: string! @id
-	timestamp: datetime
-	type: string
-	points_change: int
-	description: string
-	rule: Rule @hasInverse(field: transactions)
-	citizen: Citizen @hasInverse(field: transactions)
-	location: geo
-	evidence_id: string
-}
-
-type Rule {
-	id: string! @id
-	rule_id: string
-	name: string
-	description: string
-	category: string
-	base_impact: int
-	active: bool
-	transactions: [Transaction] @hasInverse(field: rule)
-}
-
-type Flag {
-	id: string! @id
-	name: string
-	type: string                 # warning, restriction, privilege, etc.
-	severity: int
-	creation_date: datetime
-	expiration_date: datetime
-	description: string
-	citizens: [Citizen] @hasInverse(field: flags)
-}
-
-# New types for enhanced citizen tracking
-
-type BiometricIdentifier {
-	id: string! @id
-	type: string                  # fingerprint, facial, retina, voice, gait, etc.
-	hash_value: string            # secure hash of biometric data
-	confidence_score: float       # confidence level of biometric match
-	last_updated: datetime
-	verification_count: int       # how many times verified
-	citizen: Citizen @hasInverse(field: biometric_identifiers)
-}
-
-type SurveillanceProfile {
-	id: string! @id
-	risk_level: string            # low, medium, high, extreme
-	surveillance_tier: int        # surveillance intensity level (1-5)
-	monitoring_frequency: string  # continuous, daily, weekly
-	assigned_algorithms: [string] # algorithms used for monitoring
-	override_authority: string    # authority that can override surveillance
-	citizen: Citizen @hasInverse(field: surveillance_profile)
-	exclusion_zones: [Location] @hasInverse(field: excluded_citizens)
-	permitted_zones: [Location] @hasInverse(field: permitted_citizens)
-	surveillance_notes: [SurveillanceNote] @hasInverse(field: profile)
-}
-
-type SurveillanceNote {
-	id: string! @id
-	timestamp: datetime
-	observer_id: string
-	content: string
-	classification: string        # routine, suspicious, actionable
-	attachments: [string]         # references to evidence
-	profile: SurveillanceProfile @hasInverse(field: surveillance_notes)
-}
-
-type BehavioralPattern {
-	id: string! @id
-	pattern_type: string          # routine, anomaly, developing
-	confidence: float             # confidence in pattern detection
-	first_observed: datetime
-	last_observed: datetime
-	frequency: string             # daily, weekly, monthly, sporadic
-	locations: [Location]
-	associated_citizens: [Citizen]
-	description: string
-	potential_motivations: [string]
-	citizen: Citizen @hasInverse(field: behavioralPatterns)
-	pattern_components: [PatternComponent] @hasInverse(field: parent_pattern)
-}
-
-type PatternComponent {
-	id: string! @id
-	activity_type: string
-	typical_time: datetime
-	typical_duration: int         # in minutes
-	typical_location: Location
-	reliability: float            # how reliably this component occurs
-	parent_pattern: BehavioralPattern @hasInverse(field: pattern_components)
-}
-
-type TravelEvent {
-	id: string! @id
-	departure_time: datetime
-	arrival_time: datetime
-	origin: Location
-	destination: Location
-	purpose: string
-	authorization_status: string  # authorized, unauthorized, suspicious
-	transportation_method: string
-	companions: [Citizen]
-	verification_status: string   # verified, unverified, disputed
-	citizen: Citizen @hasInverse(field: travelHistory)
-}
-
-type DigitalFootprint {
-	id: string! @id
-	online_handles: [string]
-	sentiment_analysis: float     # -1.0 to 1.0 range
-	platform_presence: [PlatformPresence] @hasInverse(field: digital_footprint)
-	content_categories: [string]
-	influence_sphere: [Citizen]
-	suspicious_connections: [Citizen]
-	encryption_usage: float       # frequency of encryption usage
-	browsing_patterns: string
-	citizen: Citizen @hasInverse(field: digitalFootprint)
-}
-
-type PlatformPresence {
-	id: string! @id
-	platform_name: string
-	account_handle: string
-	verification_status: string
-	follower_count: int
-	influence_score: float
-	sentiment_score: float
-	activity_frequency: float
-	content_analysis: string
-	digital_footprint: DigitalFootprint @hasInverse(field: platform_presence)
-}
-
-type ConsumptionProfile {
-	id: string! @id
-	luxury_score: float
-	necessity_score: float
-	resource_efficiency: float
-	consumption_categories: [ConsumptionCategory] @hasInverse(field: profile)
-	purchasing_patterns: [PurchasingPattern] @hasInverse(field: profile)
-	citizen: Citizen @hasInverse(field: consumptionProfile)
-}
-
-type ConsumptionCategory {
-	id: string! @id
-	category_name: string
-	spending_level: float
-	approved_status: string       # approved, flagged, restricted
-	monthly_allocation: float
-	monthly_actual: float
-	profile: ConsumptionProfile @hasInverse(field: consumption_categories)
-}
-
-type PurchasingPattern {
-	id: string! @id
-	pattern_name: string
-	frequency: string
-	typical_vendors: [string]
-	typical_amounts: [float]
-	items_of_interest: [string]   # specific items tracked by the system
-	profile: ConsumptionProfile @hasInverse(field: purchasing_patterns)
-}
-
-type IdeologicalProfile {
-	id: string! @id
-	alignment_score: float        # ideological alignment with society standards
-	deviation_metrics: [string]   # areas of ideological deviation
-	exposure_history: [string]    # exposure to unapproved ideologies
-	correction_attempts: int      # number of correction attempts
-	reeducation_status: string    # none, pending, in progress, completed
-	ideological_trajectory: string # improving, stable, concerning, dangerous
-	citizen: Citizen @hasInverse(field: ideologicalAlignment)
-}
-
-type ComplianceHistory {
-	id: string! @id
-	overall_compliance_score: float
-	historical_compliance: [ComplianceEvent] @hasInverse(field: history)
-	compliance_streak: int        # days of continuous compliance
-	last_violation: datetime
-	intervention_history: [InterventionEvent] @hasInverse(field: compliance_history)
-	citizen: Citizen @hasInverse(field: complianceHistory)
-}
-
-type ComplianceEvent {
-	id: string! @id
-	event_date: datetime
-	event_type: string            # violation, compliance, correction
-	rule_reference: string
-	impact_on_score: int
-	location: Location
-	associated_citizens: [Citizen]
-	evidence_references: [string]
-	history: ComplianceHistory @hasInverse(field: historical_compliance)
-}
-
-type InterventionEvent {
-	id: string! @id
-	intervention_date: datetime
-	intervention_type: string     # warning, restriction, reeducation, detention
-	authority: string             # who authorized the intervention
-	duration: int                 # duration in days, 0 for permanent
-	outcome: string               # successful, failed, ongoing
-	compliance_history: ComplianceHistory @hasInverse(field: intervention_history)
-}
-
-# Index definitions
-simulated_id: string @index(exact) .
-name: string @index(term) .
-current_score: int @index(int) .
-tier: string @index(exact) .
-national_id: string @index(exact) .
-type: string @index(exact) .
-status: string @index(exact) .
-coordinates: geo @index(geo) .
-influence_score: float @index(float) .
-timestamp: datetime @index(hour) .
-biometric_hash: string @index(exact) .
-risk_level: string @index(exact) .
-pattern_type: string @index(exact) .
-alignment_score: float @index(float) .
-surveillance_level: int @index(int) .

@@ -1,0 +1,129 @@
+// База данных
+DATABASE social_credit_system
+
+// Измерение для хранения событий
+// Теги используются для индексации и быстрых запросов
+// Поля содержат необходимые значения
+MEASUREMENT events
+  TAGS:
+    citizen_id: STRING       // ID гражданина
+    event_type: STRING       // Тип события (финансовое, социальное и т.д.)
+    event_subtype: STRING    // Подтип события
+    region: STRING           // Регион
+    city: STRING             // Город
+    district: STRING         // Район
+    source_system: STRING    // Система-источник события
+  FIELDS:
+    score_impact: INTEGER    // Влияние на рейтинг (может быть положительным или отрицательным)
+    description: STRING      // Описание события
+    metadata: JSON           // Дополнительные метаданные события в формате JSON
+    has_related_documents: BOOLEAN // Флаг наличия связанных документов
+    source_id: STRING        // ID события в системе-источнике
+    location_lat: FLOAT      // Широта геолокации события (опционально)
+    location_lon: FLOAT      // Долгота геолокации события (опционально)
+  TIMESTAMP: timestamp       // Время события
+
+// Измерение для хранения истории изменения рейтинга
+MEASUREMENT score_history
+  TAGS:
+    citizen_id: STRING       // ID гражданина
+    reason_category: STRING  // Категория причины изменения
+  FIELDS:
+    old_score: INTEGER       // Предыдущее значение рейтинга
+    new_score: INTEGER       // Новое значение рейтинга
+    change_amount: INTEGER   // Изменение рейтинга
+    reason: STRING           // Причина изменения
+    related_event_id: STRING // Ссылка на событие, вызвавшее изменение
+  TIMESTAMP: timestamp       // Время изменения рейтинга
+
+// Измерение для агрегированных данных о рейтинге по регионам
+MEASUREMENT region_score_aggregates
+  TAGS:
+    region: STRING           // Регион
+    city: STRING             // Город (опционально)
+    district: STRING         // Район (опционально)
+  FIELDS:
+    avg_score: FLOAT         // Средний рейтинг в регионе
+    median_score: FLOAT      // Медианный рейтинг в регионе
+    min_score: INTEGER       // Минимальный рейтинг
+    max_score: INTEGER       // Максимальный рейтинг
+    total_citizens: INTEGER  // Общее количество граждан
+    excellent_tier_count: INTEGER // Количество граждан в уровне "Образцовый"
+    standard_tier_count: INTEGER  // Количество граждан в уровне "Обычный"
+    concerning_tier_count: INTEGER // Количество граждан в уровне "Тревожный"
+    untrusted_tier_count: INTEGER  // Количество граждан в уровне "Неблагонадежный"
+  TIMESTAMP: timestamp       // Время агрегации
+
+// Измерение для хранения метрик активности гражданина
+MEASUREMENT citizen_activity_metrics
+  TAGS:
+    citizen_id: STRING       // ID гражданина
+    region: STRING           // Регион проживания
+  FIELDS:
+    financial_activity_score: FLOAT // Оценка финансовой активности
+    social_activity_score: FLOAT    // Оценка социальной активности
+    online_activity_score: FLOAT    // Оценка онлайн-активности
+    total_positive_events: INTEGER  // Общее число положительных событий за период
+    total_negative_events: INTEGER  // Общее число отрицательных событий за период
+    association_risk_factor: FLOAT  // Фактор риска от ассоциаций с другими гражданами
+    activity_trend: FLOAT           // Тренд активности (улучшение/ухудшение)
+    current_score: INTEGER          // Текущий рейтинг
+  TIMESTAMP: timestamp       // Время сбора метрик
+
+// Измерение для хранения данных социального графа (упрощенная версия)
+// Это не заменит Dgraph, но может использоваться для аналитики
+MEASUREMENT social_graph_metrics
+  TAGS:
+    citizen_id: STRING       // ID гражданина
+    relation_type: STRING    // Тип связи (семья, коллеги, друзья)
+  FIELDS:
+    related_citizens_count: INTEGER // Количество связанных граждан
+    avg_relation_score: FLOAT       // Средний рейтинг связанных граждан
+    relation_risk_factor: FLOAT     // Фактор риска от связей
+    excellent_tier_relations: INTEGER // Число связей с гражданами "Образцового" уровня
+    concerning_tier_relations: INTEGER // Число связей с гражданами "Тревожного" уровня
+    untrusted_tier_relations: INTEGER  // Число связей с гражданами "Неблагонадежного" уровня
+  TIMESTAMP: timestamp       // Время анализа
+
+// Continuous Queries (CQ) для автоматической агрегации данных
+// CQ для ежедневной агрегации событий по гражданину
+CREATE CONTINUOUS QUERY "daily_events_by_citizen" ON "social_credit_system"
+BEGIN
+  SELECT 
+    count(*) AS event_count,
+    sum(score_impact) AS total_score_impact,
+    mean(score_impact) AS avg_score_impact,
+    count(score_impact > 0) AS positive_events,
+    count(score_impact < 0) AS negative_events
+  INTO "daily_citizen_events"
+  FROM "events"
+  GROUP BY time(1d), citizen_id, event_type
+END
+
+// CQ для еженедельной агрегации изменений рейтинга
+CREATE CONTINUOUS QUERY "weekly_score_changes" ON "social_credit_system"
+BEGIN
+  SELECT 
+    sum(change_amount) AS total_change,
+    count(*) AS change_count
+  INTO "weekly_score_changes"
+  FROM "score_history"
+  GROUP BY time(1w), citizen_id
+END
+
+// Политики хранения данных (Retention Policies)
+// Детальные события - 1 год
+CREATE RETENTION POLICY "events_one_year" ON "social_credit_system" DURATION 365d REPLICATION 1 DEFAULT
+
+// Агрегированные данные - 10 лет
+CREATE RETENTION POLICY "aggregated_ten_years" ON "social_credit_system" DURATION 3650d REPLICATION 1
+
+// Применение политик хранения к измерениям
+ALTER RETENTION POLICY "events_one_year" ON "social_credit_system" DEFAULT
+CREATE CONTINUOUS QUERY "downsample_events" ON "social_credit_system"
+BEGIN
+  SELECT count(*) as event_count, sum(score_impact) as total_impact 
+  INTO "social_credit_system"."aggregated_ten_years"."events_monthly"
+  FROM "events"
+  GROUP BY time(30d), citizen_id, event_type
+END 

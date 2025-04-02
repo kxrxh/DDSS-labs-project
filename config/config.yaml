@@ -1,0 +1,38 @@
+clickhouse:
+  dsn: "tcp://localhost:9000?database=default&username=default&read_timeout=10&write_timeout=20"
+
+dgraph:
+  addresses:
+    - "localhost:9080"
+
+influx:
+  url: "http://localhost:8086"
+  token: "" # Replace!
+  org: "your-org"
+  bucket: "your-bucket"
+
+mongo:
+  uri: "mongodb://localhost:27017"
+  database: "mydatabase"
+  timeout: "10s"
+
+jwt:
+  secret: "" # Replace!
+
+server:
+  port: ":3000"
+
+logger:
+  level: "info" # debug, info, warn, error, dpanic, panic, fatal
+  encoding: "json" # json or console
+  output_path: "stdout" # stdout, stderr, or file path
+
+redpanda:
+  brokers:
+    - "localhost:9092" # List of RedPanda/Kafka brokers
+  topic: "default-topic"    # Default topic for producer/consumer
+  group_id: "default-group" # Consumer group ID
+
+flink:
+  jobmanager_host: "localhost" # Flink JobManager hostname or IP
+  rest_port: 8081               # Flink REST API port
