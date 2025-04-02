@@ -7,7 +7,7 @@ variable "namespace" {
 
 variable "replicas" {
   type        = number
-  default     = 3
+  default     = 1
   description = "The number of MongoDB replicas."
 }
 
@@ -21,4 +21,10 @@ variable "mongo_image" {
   type = string
   default = "mongo:latest"
   description = "mongo image to use"
+}
+
+variable "release_name" {
+  description = "The Helm release name for MongoDB."
+  type        = string
+  default     = "mongodb" # Or whatever default makes sense
 }

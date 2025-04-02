@@ -1,7 +1,10 @@
 resource "kubernetes_deployment" "mongo_express" {
   metadata {
     name      = "mongo-express"
-    namespace = kubernetes_namespace.mongodb.metadata[0].name
+    namespace = var.namespace
+    labels = {
+      app = "mongo-express"
+    }
   }
 
   spec {
@@ -57,7 +60,10 @@ resource "kubernetes_deployment" "mongo_express" {
 resource "kubernetes_service" "mongo_express" {
   metadata {
     name      = "mongo-express-service"
-    namespace = kubernetes_namespace.mongodb.metadata[0].name
+    namespace = var.namespace
+    labels = {
+      app = "mongo-express"
+    }
   }
 
   spec {

@@ -7,16 +7,17 @@ terraform {
   }
 }
 
-resource "kubernetes_namespace" "mongodb" {
-  metadata {
-    name = var.namespace
-  }
-}
+# resource "kubernetes_namespace" "mongodb" {
+#   metadata {
+#     name = var.namespace
+#   }
+# }
 
 resource "kubernetes_service" "mongodb_headless" {
   metadata {
     name      = "mongodb-service"
-    namespace = kubernetes_namespace.mongodb.metadata[0].name
+    # namespace = kubernetes_namespace.mongodb.metadata[0].name
+    namespace = var.namespace # Use the passed-in namespace directly
     labels = {
       app = "mongodb"
     }
@@ -36,14 +37,15 @@ resource "kubernetes_service" "mongodb_headless" {
 resource "kubernetes_stateful_set" "mongodb" {
   metadata {
     name      = "mongodb"
-    namespace = kubernetes_namespace.mongodb.metadata[0].name
+    # namespace = kubernetes_namespace.mongodb.metadata[0].name
+    namespace = var.namespace # Use the passed-in namespace directly
   }
 
-  lifecycle {
-    replace_triggered_by = [
-      kubernetes_namespace.mongodb
-    ]
-  }
+  # lifecycle {
+  #   replace_triggered_by = [
+  #     kubernetes_namespace.mongodb # No longer needed as ns is managed outside
+  #   ]
+  # }
 
   spec {
     service_name = kubernetes_service.mongodb_headless.metadata[0].name

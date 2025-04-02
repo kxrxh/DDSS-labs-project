@@ -1,0 +1,58 @@
+# social-rating-job.yaml
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: social-rating-job
+  namespace: dev-flink-jobs # Target namespace watched by the operator
+spec:
+  # Use a standard Flink image matching your Flink version
+  image: flink:1.20-scala_2.12-java8 
+  flinkVersion: v1_20 # Matches the base image and pom.xml Flink version
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+    # Increase checkpoint interval if needed
+    execution.checkpointing.interval: "1min"
+    # Add any other Flink configurations your job needs
+    # e.g., environment variables for connection strings, parallelism defaults
+    # Refer to: https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/deployment/config/
+
+  serviceAccount: flink # Default service account, ensure it exists or create one
+
+  podTemplate:
+    spec:
+      # Define a hostPath volume pointing to a directory on your local machine
+      volumes:
+      - name: flink-job-jar-hostpath
+        hostPath:
+          # IMPORTANT: This path must exist on your host machine where Kubernetes node runs.
+          # Ensure Kubernetes has permissions to read from this path.
+          # You will need to copy your JAR file into this directory on your host.
+          path: /tmp/flink-jars # Example path, change if needed
+          type: DirectoryOrCreate # Creates the directory if it doesn't exist (on the node)
+
+      # Mount the hostPath volume into the main Flink containers
+      containers:
+      - name: flink-main-container # Name must be this for the operator to merge mounts
+        volumeMounts:
+        - name: flink-job-jar-hostpath
+          mountPath: /opt/flink/usrlib # Mount into Flink's standard user lib dir
+          # readOnly: true # Optional: mount as read-only
+
+  jobManager:
+    resource:
+      memory: "1024m"
+      cpu: 1
+  taskManager:
+    resource:
+      memory: "1536m" # Slightly more memory for task managers
+      cpu: 1
+
+  job:
+    # Points to the JAR file mounted from the host via hostPath
+    # Ensure the filename here matches the filename you copied to the host path
+    jarURI: local:///opt/flink/usrlib/social-rating-flink-job.jar 
+    entryClass: "com.github.kxrxh.DataStreamJob" # Main class from pom.xml
+    # args: [] # Add job arguments if needed
+    parallelism: 2 # Set desired parallelism
+    upgradeMode: stateless # Use 'savepoint' if your job maintains state
+    state: running # Start the job automatically 
