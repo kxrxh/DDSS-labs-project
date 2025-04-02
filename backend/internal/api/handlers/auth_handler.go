@@ -6,9 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kxrxh/ddss/internal/models"
-	"github.com/kxrxh/ddss/internal/repositories"
-	"github.com/kxrxh/ddss/internal/repositories/mongo"
+	"github.com/kxrxh/social-rating-system/internal/models"
+	"github.com/kxrxh/social-rating-system/internal/repositories/mongo"
 	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -29,7 +28,7 @@ type LoginPayload struct {
 }
 
 // RegisterHandler handles user registration.
-func RegisterHandler(repos map[string]repositories.Repository) fiber.Handler {
+func RegisterHandler(deps *Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		payload := new(RegisterPayload)
 		if err := c.BodyParser(payload); err != nil {
@@ -40,8 +39,8 @@ func RegisterHandler(repos map[string]repositories.Repository) fiber.Handler {
 			return fiber.NewError(fiber.StatusBadRequest, "Username and password are required")
 		}
 
-		// Get MongoDB repository
-		mongoRepo, ok := repos["mongo"].(*mongo.Repository)
+		// Get MongoDB repository from dependencies
+		mongoRepo, ok := deps.Repos["mongo"].(*mongo.Repository)
 		if !ok {
 			return fiber.NewError(fiber.StatusInternalServerError, "Database service not available")
 		}
@@ -84,7 +83,7 @@ func RegisterHandler(repos map[string]repositories.Repository) fiber.Handler {
 }
 
 // LoginHandler handles user login and issues a JWT.
-func LoginHandler(repos map[string]repositories.Repository) fiber.Handler {
+func LoginHandler(deps *Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		payload := new(LoginPayload)
 		if err := c.BodyParser(payload); err != nil {
@@ -95,8 +94,8 @@ func LoginHandler(repos map[string]repositories.Repository) fiber.Handler {
 			return fiber.NewError(fiber.StatusBadRequest, "Username and password are required")
 		}
 
-		// Get MongoDB repository
-		mongoRepo, ok := repos["mongo"].(*mongo.Repository)
+		// Get MongoDB repository from dependencies
+		mongoRepo, ok := deps.Repos["mongo"].(*mongo.Repository)
 		if !ok {
 			return fiber.NewError(fiber.StatusInternalServerError, "Database service not available")
 		}

@@ -6,15 +6,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// ResponseData represents the standard API response structure
-type ResponseData struct {
-	Status    int         `json:"status"`
-	Message   string      `json:"message"`
-	Result    interface{} `json:"result"`
-	Timestamp string      `json:"timestamp"`
-	Path      string      `json:"path"`
-}
-
 // ResponseFormatter is a middleware that formats all API responses
 func ResponseFormatter() fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -60,6 +51,6 @@ func getStatusMessage(status int) string {
 	case fiber.StatusInternalServerError:
 		return "Internal Server Error"
 	default:
-		return "Unknown Status"
+		return "Other Status"
 	}
 }

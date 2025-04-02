@@ -6,7 +6,7 @@ import (
 	"time"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/kxrxh/ddss/internal/repositories"
+	"github.com/kxrxh/social-rating-system/internal/repositories"
 )
 
 var _ repositories.Repository = (*Repository)(nil)

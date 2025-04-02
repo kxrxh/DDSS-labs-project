@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/kxrxh/ddss/internal/repositories"
-	"github.com/kxrxh/ddss/internal/repositories/mongo" // Example for type assertion
+	"github.com/kxrxh/social-rating-system/internal/repositories"
+	"github.com/kxrxh/social-rating-system/internal/repositories/mongo" // Example for type assertion
 )
 
 // HealthHandler checks the health of the service, potentially including DB connections.

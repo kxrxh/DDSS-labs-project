@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	"github.com/kxrxh/ddss/internal/repositories"
+	"github.com/kxrxh/social-rating-system/internal/repositories"
 )
 
 var _ repositories.Repository = (*Repository)(nil)

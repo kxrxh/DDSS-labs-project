@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/kxrxh/ddss/internal/config"
-	"github.com/kxrxh/ddss/internal/logger"
+	"github.com/kxrxh/social-rating-system/internal/config"
+	"github.com/kxrxh/social-rating-system/internal/logger"
 	"go.uber.org/zap"
 )
 

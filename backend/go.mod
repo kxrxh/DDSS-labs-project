@@ -1,4 +1,4 @@
-module github.com/kxrxh/ddss
+module github.com/kxrxh/social-rating-system
 
 go 1.23.6
 
@@ -7,7 +7,6 @@ require (
 	github.com/gofiber/contrib/jwt v1.0.10
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	github.com/google/wire v0.6.0
 	github.com/influxdata/influxdb-client-go/v2 v2.14.0
 	github.com/twmb/franz-go v1.18.1
 	go.mongodb.org/mongo-driver v1.17.3

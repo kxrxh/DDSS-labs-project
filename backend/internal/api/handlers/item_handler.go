@@ -4,15 +4,15 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/kxrxh/ddss/internal/repositories"
-	"github.com/kxrxh/ddss/internal/repositories/mongo" // Example for type assertion
+	// "github.com/kxrxh/social-rating-system/internal/repositories" // No longer needed directly
+	"github.com/kxrxh/social-rating-system/internal/repositories/mongo" // Example for type assertion
 )
 
 // GetItemsHandler handles requests to retrieve items.
-func GetItemsHandler(repos map[string]repositories.Repository) fiber.Handler {
+func GetItemsHandler(deps *Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Access a specific repository, e.g., MongoDB
-		mongoRepo, ok := repos["mongo"].(*mongo.Repository)
+		// Access a specific repository from dependencies
+		mongoRepo, ok := deps.Repos["mongo"].(*mongo.Repository)
 		if !ok {
 			return fiber.NewError(fiber.StatusInternalServerError, "Required database service (mongo) not available")
 		}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/kxrxh/ddss/internal/config"
-	"github.com/kxrxh/ddss/internal/logger"
+	"github.com/kxrxh/social-rating-system/internal/config"
+	"github.com/kxrxh/social-rating-system/internal/logger"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 )

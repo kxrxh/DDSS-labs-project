@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	"github.com/kxrxh/ddss/internal/logger"
+	"github.com/kxrxh/social-rating-system/internal/logger"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )

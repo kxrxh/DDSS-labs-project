@@ -7,7 +7,7 @@ import (
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
 
-	"github.com/kxrxh/ddss/internal/repositories"
+	"github.com/kxrxh/social-rating-system/internal/repositories"
 )
 
 var _ repositories.Repository = (*Repository)(nil)
