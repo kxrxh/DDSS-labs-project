@@ -35,6 +35,40 @@ resource "kubernetes_namespace" "database" {
   }
 }
 
+resource "kubernetes_namespace" "analytics" {
+  metadata {
+    name = "dev-analytics"
+  }
+}
+
+module "influxdb" {
+  source = "../../modules/influxdb"
+
+  namespace        = kubernetes_namespace.analytics.metadata[0].name
+  release_name     = "dev-influxdb"
+  # Let the module create the namespace if needed (redundant but safe)
+  # create_namespace = true 
+  persistence_storage_class = "local-path" # Use the same SC as redpanda
+}
+
+module "clickhouse" {
+  source = "../../modules/clickhouse"
+
+  # This module now deploys the main 'clickhouse' chart from Altinity,
+  # which includes the operator as a dependency.
+
+  # Release name for the main ClickHouse deployment
+  operator_release_name     = "dev-clickhouse" # Renamed release
+
+  # Namespace for BOTH the ClickHouse cluster AND the operator (if chart enables it)
+  installation_namespace = kubernetes_namespace.analytics.metadata[0].name
+  operator_create_namespace = true # Allow chart to create the installation namespace
+
+  # installation_name is no longer needed (chart handles CHI naming)
+  # installation_persistence_storage_class is now configured via chart values if needed
+  # create_default_installation is removed as chart handles CHI
+}
+
 module "mongodb" {
   source = "../../modules/mongodb"
   namespace = kubernetes_namespace.database.metadata[0].name
@@ -67,13 +101,54 @@ module "flink_operator" {
   create_namespace = true
 }
 
-# TODO: Define FlinkDeployment/FlinkSessionJob resources in the 'dev-flink-jobs' namespace
-# This could be done via separate Kubernetes manifests (kubectl apply)
-# or using kubernetes_manifest resources here after the operator is ready.
+# Ensure the Flink job JAR is built and copied to the expected host path
+resource "null_resource" "build_and_copy_flink_job" {
+  # Trigger this resource when files in the Flink job source directory change
+  triggers = {
+    # Using timestamp of pom.xml as a proxy for changes
+    # Consider a more robust method like hashing source files if needed
+    source_code_hash = filemd5("${path.root}/../../social-rating-flink-job/pom.xml")
+  }
 
-# Example of creating the namespace for jobs (optional, chart can create too)
-# resource "kubernetes_namespace" "flink_jobs" {
-#   metadata {
-#     name = "dev-flink-jobs"
-#   }
-# }
+  provisioner "local-exec" {
+    # Build command
+    command     = "mvn clean package"
+    working_dir = "${path.root}/../../social-rating-flink-job"
+  }
+
+  provisioner "local-exec" {
+    # Copy command: create dir and copy JAR to the host path mounted by pods
+    # Paths are relative to the environments/dev directory where terraform runs
+    command = <<-EOT
+      mkdir -p /tmp/flink-jars && \
+      cp ../../social-rating-flink-job/target/social-rating-flink-job-1.0-SNAPSHOT.jar /tmp/flink-jars/social-rating-flink-job.jar
+    EOT
+  }
+}
+
+# Define the namespace for Flink jobs
+resource "kubernetes_namespace" "flink_jobs" {
+  metadata {
+    name = "dev-flink-jobs" # Must match the namespace in social-rating-job.yaml and flink_operator watchNamespaces
+  }
+}
+
+# Deploy the Flink job using the Kubernetes manifest
+resource "kubernetes_manifest" "social_rating_flink_job" {
+  # Read the manifest content from the YAML file relative to this main.tf
+  manifest = yamldecode(file("${path.root}/../../social-rating-job.yaml"))
+
+  # Explicitly depend on the Flink operator module being ready,
+  # the JAR build/copy process completing, the namespace existing,
+  # AND the dependent service modules completing their apply.
+  depends_on = [
+    module.flink_operator,
+    null_resource.build_and_copy_flink_job,
+    kubernetes_namespace.flink_jobs,
+    module.clickhouse,
+    module.redpanda,
+    module.mongodb,
+    module.dgraph,
+    module.influxdb
+  ]
+}

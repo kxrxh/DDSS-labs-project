@@ -19,6 +19,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 
+// Remove incorrect imports
+// import com.mongodb.client.MongoClient; // Keep this if used elsewhere, but not needed for ParameterTool
+// import com.mongodb.client.MongoClients; // Keep this if used elsewhere
+// import com.mongodb.client.MongoCollection; // Keep this if used elsewhere
+// import com.mongodb.client.MongoDatabase; // Keep this if used elsewhere
+
+// Import GlobalJobParameters
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
+
 /**
  * A RichAsyncFunction to enrich CitizenEvent with demographic data (ageGroup, gender)
  * fetched asynchronously from MongoDB.
@@ -42,10 +51,20 @@ public class AsyncEnrichWithDemographicsFunction
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        // Get global parameters
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-        if (params == null) {
-             throw new RuntimeException("Global job parameters (ParameterTool) not found.");
+        
+        // Correct way to get ParameterTool using GlobalJobParameters
+        GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        
+        if (globalJobParameters == null) {
+            throw new RuntimeException("Global job parameters not found.");
+        }
+        
+        // Create ParameterTool from the map provided by GlobalJobParameters
+        this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+        
+        if (this.params == null) {
+             // This check might be redundant if toMap() never returns null, but good for safety
+             throw new RuntimeException("ParameterTool could not be created from job parameters map.");
         }
 
         // Get MongoDB config from parameters

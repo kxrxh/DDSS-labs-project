@@ -18,6 +18,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
+import org.apache.flink.util.Collector;
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
 
 /**
  * A RichAsyncFunction to enrich ScoreSnapshot with the citizen's relationship count
@@ -41,10 +43,21 @@ public class AsyncEnrichWithRelationCountFunction
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-         if (params == null) {
-             throw new RuntimeException("Global job parameters (ParameterTool) not found.");
-         }
+        
+        // Correct way to get ParameterTool using GlobalJobParameters
+        GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        
+        if (globalJobParameters == null) {
+            throw new RuntimeException("Global job parameters not found.");
+        }
+        
+        // Create ParameterTool from the map provided by GlobalJobParameters
+        this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+        
+        if (this.params == null) {
+             // This check might be redundant if toMap() never returns null, but good for safety
+             throw new RuntimeException("ParameterTool could not be created from job parameters map.");
+        }
 
         final String dgraphUri = params.getRequired(ParameterNames.DGRAPH_URI);
         final int threadPoolSize = params.getInt("async.enrich.relation.pool.size", 10); // Optional

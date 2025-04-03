@@ -7,7 +7,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Properties;
 
 // Add necessary model imports
 import com.github.kxrxh.model.EventAggregate;
@@ -23,33 +22,59 @@ public class ClickHouseRepository implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ClickHouseRepository.class);
 
-    // Configuration (Consider externalizing this)
-    private static final String CLICKHOUSE_JDBC_URL = "jdbc:clickhouse://localhost:8123/default"; // Example
-    // Add user/password if required by your ClickHouse setup
-    // private static final String CLICKHOUSE_USER = "user";
-    // private static final String CLICKHOUSE_PASSWORD = "password";
+    // Driver class name
     private static final String CLICKHOUSE_DRIVER = "com.clickhouse.jdbc.ClickHouseDriver";
 
     private Connection connection;
 
+    // Default constructor is not supported - requires a JDBC URL.
+    @Deprecated // Mark as deprecated, prefer explicit URL constructor
     public ClickHouseRepository() {
-        this(CLICKHOUSE_JDBC_URL, null); // Pass null for properties if no user/pass needed
+         throw new UnsupportedOperationException("ClickHouseRepository requires a JDBC URL. Use the constructor ClickHouseRepository(String jdbcUrl).");
     }
 
-    public ClickHouseRepository(String jdbcUrl, Properties properties) {
+    /**
+     * Constructs a ClickHouseRepository and establishes a connection.
+     * Reads credentials (user/password) from environment variables CLICKHOUSE_USER and CLICKHOUSE_PASSWORD.
+     *
+     * @param jdbcUrl The base ClickHouse JDBC URL (e.g., "jdbc:clickhouse://host:port/database")
+     * @throws RuntimeException if the JDBC driver is not found, credentials are missing, or connection fails.
+     */
+    public ClickHouseRepository(String jdbcUrl) {
         try {
             // Ensure the JDBC driver is loaded
             Class.forName(CLICKHOUSE_DRIVER);
 
-            LOG.info("Connecting to ClickHouse at: {}", jdbcUrl);
-            if (properties == null) {
-                this.connection = DriverManager.getConnection(jdbcUrl);
-            } else {
-                // Example if using user/password:
-                // properties.setProperty("user", CLICKHOUSE_USER);
-                // properties.setProperty("password", CLICKHOUSE_PASSWORD);
-                this.connection = DriverManager.getConnection(jdbcUrl, properties);
+            // Get credentials from environment variables
+            String user = System.getenv("CLICKHOUSE_USER");
+            String password = System.getenv("CLICKHOUSE_PASSWORD");
+
+            // Validate required environment variables
+            if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
+                 LOG.error("ClickHouse JDBC URL provided is null or empty.");
+                 throw new IllegalArgumentException("ClickHouse JDBC URL cannot be null or empty.");
             }
+            if (user == null || user.trim().isEmpty()) {
+                LOG.error("ClickHouse user environment variable CLICKHOUSE_USER is not set or empty.");
+                throw new RuntimeException("ClickHouse user environment variable CLICKHOUSE_USER is not set or empty.");
+            }
+             if (password == null) {
+                 // Decide how to handle missing password. ClickHouse can allow empty passwords.
+                 // For a specific user like 'kxrxh', it's safer to assume a password is required.
+                 // If an empty password *is* valid for this user, set password = "" here instead of throwing.
+                 LOG.error("ClickHouse password environment variable CLICKHOUSE_PASSWORD is not set.");
+                 throw new RuntimeException("ClickHouse password environment variable CLICKHOUSE_PASSWORD is not set.");
+                 // Alternatively, allow empty password:
+                 // LOG.warn("ClickHouse password environment variable CLICKHOUSE_PASSWORD is not set. Using empty password.");
+                 // password = "";
+             }
+
+            LOG.info("Attempting to connect to ClickHouse at [{}] with user [{}]", jdbcUrl, user);
+
+            // Establish connection using URL and credentials from Env Vars
+            // Note: DriverManager requires URL, user, password arguments for authentication.
+            this.connection = DriverManager.getConnection(jdbcUrl, user, password);
+
             // Disable auto-commit for potential batching later
             this.connection.setAutoCommit(false);
 
@@ -59,13 +84,29 @@ public class ClickHouseRepository implements AutoCloseable {
             LOG.error("ClickHouse JDBC Driver not found: {}", CLICKHOUSE_DRIVER, e);
             throw new RuntimeException("ClickHouse JDBC Driver not found", e);
         } catch (SQLException e) {
-            LOG.error("Failed to establish ClickHouse connection to {}", jdbcUrl, e);
+            // Log connection details carefully (avoid logging password if possible)
+            LOG.error("Failed to establish ClickHouse connection to [{}] with user [{}]. Error: {}", jdbcUrl, user, e.getMessage(), e);
             throw new RuntimeException("Failed to establish ClickHouse connection", e);
-        } catch (Exception e) {
-            LOG.error("Failed to initialize ClickHouse repository", e);
-            throw new RuntimeException("Failed to initialize ClickHouse repository", e);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // Catch validation errors for URL/User/Password
+             LOG.error("Invalid configuration for ClickHouse connection: {}", e.getMessage(), e);
+             throw new RuntimeException("Invalid configuration for ClickHouse connection", e);
+        } catch (Exception e) { // Catch broader exceptions during init
+            LOG.error("Unexpected error initializing ClickHouse repository", e);
+            throw new RuntimeException("Unexpected error initializing ClickHouse repository", e);
         }
     }
+
+     /**
+      * Deprecated constructor. Use {@link #ClickHouseRepository(String)} instead.
+      * @param jdbcUrl The JDBC URL.
+      * @param properties Not used for credentials anymore.
+      */
+     @Deprecated
+     public ClickHouseRepository(String jdbcUrl, java.util.Properties properties) { // Explicitly import Properties
+         this(jdbcUrl); // Delegate to the main constructor
+         LOG.warn("Constructor ClickHouseRepository(String, Properties) is deprecated. Properties argument is ignored for credentials.");
+     }
 
     /**
      * Saves EventAggregate data to the events_aggregate table.
@@ -199,43 +240,54 @@ public class ClickHouseRepository implements AutoCloseable {
 
     /**
      * Commits the current transaction.
-     * Should be called after a batch of operations.
-     * @throws SQLException if a database access error occurs or auto-commit is enabled.
+     * Should be called periodically or at the end of a batch in the SinkFunction.
+     * @throws SQLException if a database access error occurs or the connection is closed.
      */
     public void commit() throws SQLException {
-        if (connection != null && !connection.getAutoCommit()) {
-            connection.commit();
-            LOG.debug("Committed ClickHouse transaction.");
+        if (connection != null && !connection.isClosed()) {
+            try {
+                connection.commit();
+                LOG.debug("ClickHouse transaction committed.");
+            } catch (SQLException e) {
+                LOG.error("Failed to commit ClickHouse transaction.", e);
+                throw e;
+            }
+        } else {
+             LOG.warn("Attempted to commit on a closed or null ClickHouse connection.");
         }
     }
 
     /**
-     * Rolls back the current transaction.
-     * Should be called if an error occurs during a batch of operations.
+     * Rolls back the current transaction in case of an error.
      */
     public void rollback() {
-         try {
-             if (connection != null && !connection.getAutoCommit()) {
-                 connection.rollback();
-                 LOG.warn("Rolled back ClickHouse transaction.");
-             }
-         } catch (SQLException ex) {
-             LOG.error("ClickHouse rollback failed", ex);
-         }
-     }
+        if (connection != null) {
+            try {
+                if (!connection.isClosed()) {
+                    connection.rollback();
+                    LOG.warn("ClickHouse transaction rolled back.");
+                }
+            } catch (SQLException e) {
+                LOG.error("Failed to rollback ClickHouse transaction.", e);
+            }
+        }
+    }
 
+    /**
+     * Closes the database connection.
+     */
     @Override
     public void close() {
         if (connection != null) {
             try {
                 if (!connection.isClosed()) {
-                    // Commit any pending changes before closing? Depends on strategy.
-                    // connection.commit();
                     connection.close();
                     LOG.info("ClickHouse connection closed.");
                 }
             } catch (SQLException e) {
-                LOG.error("Error closing ClickHouse connection", e);
+                LOG.error("Error closing ClickHouse connection.", e);
+            } finally {
+                connection = null; // Ensure connection is set to null
             }
         }
     }

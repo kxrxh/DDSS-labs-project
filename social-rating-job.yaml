@@ -6,7 +6,7 @@ metadata:
   namespace: dev-flink-jobs # Target namespace watched by the operator
 spec:
   # Use a standard Flink image matching your Flink version
-  image: flink:1.20-scala_2.12-java8 
+  image: flink:1.20-scala_2.12-java11 
   flinkVersion: v1_20 # Matches the base image and pom.xml Flink version
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
@@ -38,21 +38,126 @@ spec:
           mountPath: /opt/flink/usrlib # Mount into Flink's standard user lib dir
           # readOnly: true # Optional: mount as read-only
 
+        # Define environment variables for ClickHouse credentials
+        # These should be merged into both JM and TM by the operator
+        env:
+        - name: CLICKHOUSE_USER
+          value: "kxrxh"
+        - name: CLICKHOUSE_PASSWORD
+          value: "mycoolpassword"
+
   jobManager:
     resource:
       memory: "1024m"
       cpu: 1
+    podTemplate:
+      spec:
+        # Define a hostPath volume pointing to a directory on your local machine
+        volumes:
+        - name: flink-job-jar-hostpath
+          hostPath:
+            # IMPORTANT: This path must exist on your host machine where Kubernetes node runs.
+            # Ensure Kubernetes has permissions to read from this path.
+            # You will need to copy your JAR file into this directory on your host.
+            path: /tmp/flink-jars # Example path, change if needed
+            type: DirectoryOrCreate # Creates the directory if it doesn't exist (on the node)
+        
+        # Add initContainer to create Kafka topics
+        initContainers:
+        - name: kafka-topic-creator
+          image: bitnami/kafka:latest # Image with kafka-topics.sh
+          # Override entrypoint to directly run commands
+          command: ['/bin/sh', '-c']
+          # Command to create topics if they don't exist
+          # Adjust partitions/replication factor if needed
+          args:
+            - |
+              echo "Waiting for Kafka broker...";
+              until kafka-topics.sh --bootstrap-server dev-redpanda.dev-streaming.svc.cluster.local:9093 --list > /dev/null 2>&1; do 
+                echo -n .; 
+                sleep 1; 
+              done; 
+              echo "Kafka available.";
+              echo "Creating topic input_events..."; 
+              kafka-topics.sh --bootstrap-server dev-redpanda.dev-streaming.svc.cluster.local:9093 --create --if-not-exists --topic input_events --partitions 1 --replication-factor 1; 
+              echo "Creating topic secondary_updates..."; 
+              kafka-topics.sh --bootstrap-server dev-redpanda.dev-streaming.svc.cluster.local:9093 --create --if-not-exists --topic secondary_updates --partitions 1 --replication-factor 1;
+              echo "Topic creation commands executed.";
+          
+        # Mount the hostPath volume into the main Flink containers
+        containers:
+        - name: flink-main-container # Name must be this for the operator to merge mounts
+          volumeMounts:
+          - name: flink-job-jar-hostpath
+            mountPath: /opt/flink/usrlib # Mount into Flink's standard user lib dir
+            # readOnly: true # Optional: mount as read-only
+
   taskManager:
     resource:
       memory: "1536m" # Slightly more memory for task managers
       cpu: 1
+    # Add podTemplate for TaskManager if env vars are needed here too
+    podTemplate:
+      spec:
+        containers:
+        - name: flink-main-container # Name must match
+          # REMOVE environment variables from here (should inherit from top-level podTemplate)
 
   job:
     # Points to the JAR file mounted from the host via hostPath
     # Ensure the filename here matches the filename you copied to the host path
     jarURI: local:///opt/flink/usrlib/social-rating-flink-job.jar 
     entryClass: "com.github.kxrxh.DataStreamJob" # Main class from pom.xml
-    # args: [] # Add job arguments if needed
+    args: [
+      # Kafka/Redpanda
+      "--kafka.brokers", "dev-redpanda.dev-streaming.svc.cluster.local:9093",
+      "--kafka.input.topic", "input_events", # <-- FIXME: Verify topic name
+      "--kafka.consumer.group", "social-rating-group", # <-- FIXME: Verify group name
+      "--kafka.secondary.update.topic", "secondary_updates", # <-- FIXME: Verify topic name
+      # MongoDB - Corrected Hostname
+      "--mongo.uri", "mongodb://mongodb-service.dev-db.svc.cluster.local:27017",
+      "--mongo.db.name", "social_rating", # <-- FIXME: Verify DB name
+      "--mongo.polling.interval.seconds", "60",
+      # Dgraph
+      "--dgraph.uri", "dev-dgraph-alpha.dev-db.svc.cluster.local:9080",
+      # InfluxDB - Corrected Port
+      "--influxdb.url", "http://dev-influxdb-influxdb2.dev-analytics.svc.cluster.local:80",
+      "--influxdb.token", "YOUR_INFLUXDB_TOKEN", # <-- FIXME: Replace with actual token
+      "--influxdb.org", "primary",           
+      "--influxdb.bucket", "flink_data",     
+      # ClickHouse - Corrected Hostname & Added Credentials Placeholders
+      "--clickhouse.jdbc.url", "jdbc:clickhouse://clickhouse-dev-clickhouse.dev-analytics.svc.cluster.local:8123/default",
+      # Async Defaults (Adjust if needed)
+      "--async.enrich.demographics.timeout.ms", "5000",
+      "--async.enrich.demographics.capacity", "100",
+      "--async.enrich.relation.timeout.ms", "5000",
+      "--async.enrich.relation.capacity", "100",
+      "--async.related.effect.timeout.ms", "5000",
+      "--async.related.effect.capacity", "50",
+      "-Dlog4j.configurationFile=file:/opt/flink/conf/log4j-console.properties",
+      "--job.name", "Social Rating Flink Job",
+      # Input Topics
+      "--kafka.input.brokers", "dev-redpanda-0.dev-redpanda.dev-streaming.svc.cluster.local:9093",
+      "--kafka.input.topic", "input_events",
+      "--kafka.input.group.id", "social-rating-job-consumer",
+      # Output Topics
+      "--kafka.output.brokers", "dev-redpanda-0.dev-redpanda.dev-streaming.svc.cluster.local:9093",
+      "--kafka.output.topic", "secondary_updates",
+      # MongoDB Config
+      "--mongo.rules.collection", "scoring_rules",
+      "--mongo.snapshots.collection", "citizen_snapshots",
+      "--mongo.timestamps.collection", "citizen_first_seen",
+      # Dgraph Config
+      "--dgraph.address", "dgraph-alpha.dev-db.svc.cluster.local:9080",
+      # InfluxDB Config
+      "--influxdb.url", "http://dev-influxdb-influxdb2.dev-analytics.svc.cluster.local:80",
+      "--influxdb.token", "my-super-secret-auth-token", # Replace with actual token if needed
+      "--influxdb.org", "social-rating-org",
+      "--influxdb.bucket", "social-rating-bucket",
+      # Enrichment Config
+      "--enrichment.demographics.cache.ttl.seconds", "300",
+      "--enrichment.relations.cache.ttl.seconds", "60"
+    ]
     parallelism: 2 # Set desired parallelism
     upgradeMode: stateless # Use 'savepoint' if your job maintains state
     state: running # Start the job automatically 

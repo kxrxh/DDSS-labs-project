@@ -11,6 +11,9 @@ import org.slf4j.LoggerFactory;
 import org.apache.flink.api.java.utils.ParameterTool;
 import com.github.kxrxh.config.ParameterNames;
 
+// Import GlobalJobParameters
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
+
 /**
  * A Flink SinkFunction to write SocialGraphAggregate data to ClickHouse.
  * Reads ClickHouse connection details from global job parameters.
@@ -29,10 +32,21 @@ public class ClickHouseSocialGraphSink extends RichSinkFunction<SocialGraphAggre
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-        if (params == null) {
-             throw new RuntimeException("Global job parameters (ParameterTool) not found.");
-         }
+        
+        // Correct way to get ParameterTool using GlobalJobParameters
+        GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        
+        if (globalJobParameters == null) {
+            throw new RuntimeException("Global job parameters not found.");
+        }
+        
+        // Create ParameterTool from the map provided by GlobalJobParameters
+        this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+        
+        if (this.params == null) {
+             // This check might be redundant if toMap() never returns null, but good for safety
+             throw new RuntimeException("ParameterTool could not be created from job parameters map.");
+        }
 
         final String jdbcUrl = params.getRequired(ParameterNames.CLICKHOUSE_JDBC_URL);
         // Optional: Add user/password retrieval if needed

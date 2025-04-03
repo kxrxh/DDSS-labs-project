@@ -38,8 +38,11 @@ public class MongoDbFirstSeenSinkFunction extends RichSinkFunction<Tuple2<String
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
+        
+        // Correct way to get ParameterTool
         params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-         if (params == null) {
+        
+        if (params == null) {
              throw new RuntimeException("Global job parameters (ParameterTool) not found.");
          }
 

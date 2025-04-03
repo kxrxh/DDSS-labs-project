@@ -29,10 +29,27 @@ public class ClickHouseCreditScoreSink extends RichSinkFunction<CreditScoreAggre
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-        if (params == null) {
-             throw new RuntimeException("Global job parameters (ParameterTool) not found.");
-         }
+        // Corrected ParameterTool retrieval using specific GlobalJobParameters type
+        org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters jobParameters = 
+            getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+            
+        if (jobParameters == null) {
+            throw new RuntimeException("Required GlobalJobParameters not found.");
+        }
+        try {
+             java.util.Map<String, String> map = jobParameters.toMap();
+             if (map == null) {
+                  throw new RuntimeException("GlobalJobParameters.toMap() returned null.");
+             }
+             params = ParameterTool.fromMap(map);
+             if (params == null) {
+                 // ParameterTool.fromMap might return null/empty if map is empty, check required params later
+                 throw new RuntimeException("ParameterTool could not be created from job parameters map.");
+             }
+        } catch (UnsupportedOperationException e) {
+             LOG.error("Could not convert GlobalJobParameters to map.", e);
+             throw new RuntimeException("Could not convert GlobalJobParameters to map.", e);
+        }
 
         final String jdbcUrl = params.getRequired(ParameterNames.CLICKHOUSE_JDBC_URL);
         // Optional: Add user/password retrieval from params if needed
