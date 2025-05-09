@@ -45,5 +45,26 @@ module "redpanda" {
   # This is just for conceptual illustration; actual Helm chart values will differ in structure.
 
   # redpanda_tiered_storage_bucket_name = "my-redpanda-backup-bucket" # If you want to enable tiered storage
+}
+
+module "dgraph" {
+  source = "./components/dgraph"
+
+  # You can override default Dgraph settings here if needed, for example:
+  # dgraph_namespace       = "dgraph-system"
+  # dgraph_chart_version   = "24.1.1" # Pin to a specific chart version
+  # dgraph_alpha_replicas  = 3
+  # dgraph_zero_replicas   = 3 # For High Availability
+}
+
+module "scylladb" {
+  source = "./components/scylladb"
+
+  # You can override default ScyllaDB settings here if needed, for example:
+  # scylla_namespace = "scylla-prod"
+  # scylla_operator_chart_version = "1.12.1" # Pin to a specific chart version
+  # scylla_cluster_members = 3
+  # scylla_cluster_cpus = "2"
+  # scylla_cluster_memory = "4Gi"
 } 
 

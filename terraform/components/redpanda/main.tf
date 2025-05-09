@@ -38,13 +38,18 @@ resource "helm_release" "redpanda" {
     # For a single-node cluster (like Minikube, Kind, OrbStack),
     # we need to adjust the default 'hard' anti-affinity to 'soft' or disable it.
     statefulset:
+      replicas: 1 # Changed from default of 3
       podAntiAffinity:
         type: soft # Was 'hard', preventing scheduling on a single node
 
-    # Example of enabling Redpanda Console if it's part of the same chart
-    # (Check chart documentation if 'console' is a subchart or a top-level option)
-    # console:
-    #   enabled: ${var.redpanda_console_enabled}
+    # Example of overriding resources for Redpanda statefulset
+    resources:
+      requests:
+        cpu: 1 # Using the default from your node output
+        memory: "2500Mi" # Reduced from 2560Mi
+      limits:
+        cpu: 1 # Using the default from your node output
+        memory: "2500Mi" # Reduced from 2560Mi
 
     EOT
   ]
