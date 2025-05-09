@@ -1,9 +1,3 @@
-# resource "kubernetes_namespace" "dgraph" {
-#   metadata {
-#     name = var.namespace
-#   }
-# }
-
 resource "kubernetes_stateful_set" "dgraph_zero" {
   metadata {
     name      = "dgraph-zero"

@@ -35,8 +35,8 @@ public final class ParameterNames {
     // ClickHouse Parameters
     public static final String CLICKHOUSE_JDBC_URL = "clickhouse.jdbc.url";
     // Add user/password parameters if needed for ClickHouse:
-    // public static final String CLICKHOUSE_USER = "clickhouse.user";
-    // public static final String CLICKHOUSE_PASSWORD = "clickhouse.password";
+    public static final String CLICKHOUSE_USER = "clickhouse.user";
+    public static final String CLICKHOUSE_PASSWORD = "clickhouse.password";
 
     // Async Function Parameters (Timeouts in ms, Capacity)
     public static final String ASYNC_DEMO_TIMEOUT_MS = "async.enrich.demographics.timeout.ms";

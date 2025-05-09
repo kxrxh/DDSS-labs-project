@@ -1,0 +1,1 @@
+# No outputs defined yet for scylla-operator module 

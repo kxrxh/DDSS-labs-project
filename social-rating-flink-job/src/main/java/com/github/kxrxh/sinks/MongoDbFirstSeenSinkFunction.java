@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 // Import ParameterTool and constants
 import org.apache.flink.api.java.utils.ParameterTool;
 import com.github.kxrxh.config.ParameterNames;
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
 
 /**
  * A Flink SinkFunction to write the first seen timestamp for each citizen to MongoDB.
@@ -39,12 +40,34 @@ public class MongoDbFirstSeenSinkFunction extends RichSinkFunction<Tuple2<String
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
         
-        // Correct way to get ParameterTool
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-        
-        if (params == null) {
-             throw new RuntimeException("Global job parameters (ParameterTool) not found.");
-         }
+        // Attempt 1: Get parameters directly from the Configuration object passed to open()
+        try {
+             this.params = ParameterTool.fromMap(parameters.toMap());
+             if (params.getNumberOfParameters() == 0) {
+                  LOG.warn("ParameterTool created from Configuration.toMap() is empty in MongoDbFirstSeenSinkFunction. Falling back.");
+                  throw new RuntimeException("Empty params from Configuration.toMap()"); // Force fallback
+             }
+             LOG.info("Successfully obtained parameters using Configuration.toMap() in MongoDbFirstSeenSinkFunction.");
+        } catch (Exception e) {
+             LOG.warn("Failed to get parameters using Configuration.toMap() in MongoDbFirstSeenSinkFunction, trying GlobalJobParameters. Error: {}", e.getMessage());
+             // Attempt 2: Fallback to using GlobalJobParameters
+             GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+             if (globalJobParameters == null) {
+                 throw new RuntimeException("Global job parameters not found on fallback in MongoDbFirstSeenSinkFunction.", e);
+             }
+             try {
+                 this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+                 LOG.info("Successfully obtained parameters using GlobalJobParameters.toMap() on fallback in MongoDbFirstSeenSinkFunction.");
+             } catch (Exception e2) {
+                  LOG.error("Failed to obtain parameters using both methods in MongoDbFirstSeenSinkFunction.", e2);
+                  throw new RuntimeException("Failed to create ParameterTool using both Configuration.toMap and GlobalJobParameters.toMap in MongoDbFirstSeenSinkFunction.", e2);
+             }
+        }
+
+        // Final check if params is usable
+        if (params == null || params.getNumberOfParameters() == 0) {
+            throw new RuntimeException("ParameterTool could not be created or is empty after trying both methods in MongoDbFirstSeenSinkFunction.");
+        }
 
         final String mongoUri = params.getRequired(ParameterNames.MONGO_URI);
         final String dbName = params.getRequired(ParameterNames.MONGO_DB_NAME);

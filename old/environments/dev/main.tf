@@ -8,7 +8,6 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.27"
     }
-    # Add other providers if needed (e.g., aws, google, azure)
   }
 }
 
@@ -41,32 +40,29 @@ resource "kubernetes_namespace" "analytics" {
   }
 }
 
+# Create a dummy agent config secret to satisfy the ScyllaDB Operator
+resource "kubernetes_secret" "scylla_agent_config_dummy" {
+  metadata {
+    name      = "scylla-agent-config"
+    namespace = kubernetes_namespace.database.metadata[0].name
+  }
+  data = {
+    "SCYLLA_AGENT_AUTH_TOKEN" = "dummytoken"
+  }
+  type = "Opaque"
+
+  # Ensure the namespace exists before creating the secret
+  depends_on = [kubernetes_namespace.database]
+}
+
 module "influxdb" {
   source = "../../modules/influxdb"
 
-  namespace        = kubernetes_namespace.analytics.metadata[0].name
+  namespace        = kubernetes_namespace.database.metadata[0].name
   release_name     = "dev-influxdb"
   # Let the module create the namespace if needed (redundant but safe)
   # create_namespace = true 
   persistence_storage_class = "local-path" # Use the same SC as redpanda
-}
-
-module "clickhouse" {
-  source = "../../modules/clickhouse"
-
-  # This module now deploys the main 'clickhouse' chart from Altinity,
-  # which includes the operator as a dependency.
-
-  # Release name for the main ClickHouse deployment
-  operator_release_name     = "dev-clickhouse" # Renamed release
-
-  # Namespace for BOTH the ClickHouse cluster AND the operator (if chart enables it)
-  installation_namespace = kubernetes_namespace.analytics.metadata[0].name
-  operator_create_namespace = true # Allow chart to create the installation namespace
-
-  # installation_name is no longer needed (chart handles CHI naming)
-  # installation_persistence_storage_class is now configured via chart values if needed
-  # create_default_installation is removed as chart handles CHI
 }
 
 module "mongodb" {
@@ -81,6 +77,36 @@ module "dgraph" {
   # TODO: Ensure dgraph module does not create the namespace itself
 }
 
+# Install cert-manager before ScyllaDB Operator
+module "cert_manager" {
+  source = "../../modules/cert-manager"
+}
+
+# Install ScyllaDB Operator, depends on cert-manager
+module "scylla_operator" {
+  source = "../../modules/scylla-operator"
+  # Default namespace is scylla-operator, default release name is scylla-operator
+  # Chart version defaults to a recent stable one in the module.
+  depends_on = [module.cert_manager]
+}
+
+module "scylladb" {
+  source = "../../modules/scylladb"
+
+  namespace                 = kubernetes_namespace.database.metadata[0].name
+  release_name              = "dev-scylladb"
+  persistence_storage_class = "local-path" # Ensure this matches your available SC
+  create_namespace = false
+
+  # ScyllaDB cluster depends on the ScyllaDB Operator being ready
+  # and the dummy agent config secret existing.
+  depends_on = [
+    module.scylla_operator,
+    kubernetes_namespace.database,
+    kubernetes_secret.scylla_agent_config_dummy
+  ]
+}
+
 module "redpanda" {
   source = "../../modules/redpanda"
 
@@ -90,6 +116,17 @@ module "redpanda" {
   # Use the available StorageClass found in the cluster
   storage_class_name = "local-path"
   create_namespace = true
+
+  # AND the dependent service modules completing their apply.
+  depends_on = [
+    module.flink_operator,
+    null_resource.build_and_copy_flink_job,
+    kubernetes_namespace.flink_jobs,
+    module.scylladb, # Added dependency
+    module.mongodb,
+    module.dgraph,
+    module.influxdb
+  ]
 }
 
 module "flink_operator" {
@@ -105,9 +142,11 @@ module "flink_operator" {
 resource "null_resource" "build_and_copy_flink_job" {
   # Trigger this resource when files in the Flink job source directory change
   triggers = {
-    # Using timestamp of pom.xml as a proxy for changes
-    # Consider a more robust method like hashing source files if needed
-    source_code_hash = filemd5("${path.root}/../../social-rating-flink-job/pom.xml")
+    # Hash of pom.xml and all Java source files
+    source_code_hash = sha1(join("", [
+      filemd5("${path.root}/../../social-rating-flink-job/pom.xml"),
+      join("", [for f in fileset("${path.root}/../../social-rating-flink-job/src", "**/*.java") : filemd5("${path.root}/../../social-rating-flink-job/src/${f}")])
+    ]))
   }
 
   provisioner "local-exec" {
@@ -145,8 +184,7 @@ resource "kubernetes_manifest" "social_rating_flink_job" {
     module.flink_operator,
     null_resource.build_and_copy_flink_job,
     kubernetes_namespace.flink_jobs,
-    module.clickhouse,
-    module.redpanda,
+    module.scylladb, # Added dependency
     module.mongodb,
     module.dgraph,
     module.influxdb

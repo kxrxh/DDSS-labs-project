@@ -22,7 +22,6 @@ public class InfluxDBSinkFunction extends RichSinkFunction<ScoreSnapshot> {
     private static final Logger LOG = LoggerFactory.getLogger(InfluxDBSinkFunction.class);
 
     private transient InfluxDBRepository influxDBRepository;
-    private transient ParameterTool params;
 
     // Constructor without parameters
     public InfluxDBSinkFunction() {
@@ -34,27 +33,43 @@ public class InfluxDBSinkFunction extends RichSinkFunction<ScoreSnapshot> {
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-        if (params == null) {
+        // Get global job parameters as ParameterTool, calling .toMap() first
+        ParameterTool jobParams = ParameterTool.fromMap(getRuntimeContext().getExecutionConfig().getGlobalJobParameters().toMap());
+
+        if (jobParams == null) {
              throw new RuntimeException("Global job parameters (ParameterTool) not found.");
          }
 
-        // Get InfluxDB config from parameters
-        final String influxUrl = params.getRequired(ParameterNames.INFLUXDB_URL);
-        final String influxToken = params.getRequired(ParameterNames.INFLUXDB_TOKEN);
-        final String influxOrg = params.getRequired(ParameterNames.INFLUXDB_ORG);
-        final String influxBucket = params.getRequired(ParameterNames.INFLUXDB_BUCKET);
-
-         // Basic validation
-        if (influxToken == null || influxToken.trim().isEmpty()) {
-            LOG.error("InfluxDB token parameter '{}' cannot be null or empty.", ParameterNames.INFLUXDB_TOKEN);
-            throw new IllegalArgumentException("InfluxDB token is required.");
-        }
-
+        // Get InfluxDB config using ParameterTool's getRequired method
+        // This automatically throws an exception if the parameter is missing
         try {
+            final String influxUrl = jobParams.getRequired(ParameterNames.INFLUXDB_URL);
+            final String influxToken = jobParams.getRequired(ParameterNames.INFLUXDB_TOKEN);
+            final String influxOrg = jobParams.getRequired(ParameterNames.INFLUXDB_ORG);
+            final String influxBucket = jobParams.getRequired(ParameterNames.INFLUXDB_BUCKET);
+
+            // Validation (trim checks can still be useful if empty strings are possible but invalid)
+            if (influxUrl.trim().isEmpty()) {
+                 throw new IllegalArgumentException("InfluxDB URL (" + ParameterNames.INFLUXDB_URL + ") cannot be empty.");
+            }
+            if (influxToken.trim().isEmpty()) {
+                LOG.error("InfluxDB token parameter '{}' cannot be empty.", ParameterNames.INFLUXDB_TOKEN);
+                throw new IllegalArgumentException("InfluxDB token (" + ParameterNames.INFLUXDB_TOKEN + ") cannot be empty.");
+            }
+            if (influxOrg.trim().isEmpty()) {
+                throw new IllegalArgumentException("InfluxDB Org (" + ParameterNames.INFLUXDB_ORG + ") cannot be empty.");
+            }
+            if (influxBucket.trim().isEmpty()) {
+                throw new IllegalArgumentException("InfluxDB Bucket (" + ParameterNames.INFLUXDB_BUCKET + ") cannot be empty.");
+            }
+
             // Pass configuration to the repository constructor
             influxDBRepository = new InfluxDBRepository(influxUrl, influxToken, influxOrg, influxBucket);
             LOG.info("InfluxDB Sink function initialized (URL: {}, Org: {}, Bucket: {}).", influxUrl, influxOrg, influxBucket);
+        } catch (IllegalStateException e) {
+            // ParameterTool.getRequired throws IllegalStateException if parameter is missing
+            LOG.error("Missing required InfluxDB configuration parameter: {}", e.getMessage(), e);
+            throw new RuntimeException("Missing required InfluxDB configuration parameter.", e);
         } catch (Exception e) {
             LOG.error("Failed to initialize InfluxDBRepository in Sink function", e);
             throw new RuntimeException("Failed to initialize InfluxDB connection in Sink", e);

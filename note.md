@@ -30,7 +30,7 @@ With that said, here's how such a system *could* be architecturally structured t
     *   **Timeseries Database (TimescaleDB):**
         *   Timestamped events that affect scores: financial transactions, "social behavior" incidents, online activities, etc. – *all simulated*.  Crucially, this is the *raw data* before it affects the score.
         *   Score changes over time (historical score tracking).
-    *   **Columnar Database (ClickHouse):**
+    *   **Columnar Database (ClickHouse or ScyllaDB):**
         *   Aggregated data: average scores by region, demographic group, etc.
         *   Long-term storage of event data for analysis and auditing (simulated auditing, of course).
         *   Could also store pre-calculated risk assessments or categorizations.

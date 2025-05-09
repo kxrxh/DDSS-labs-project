@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 // Import ParameterTool and constants
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
 import com.github.kxrxh.config.ParameterNames;
 
 /**
@@ -29,37 +30,29 @@ public class ClickHouseCreditScoreSink extends RichSinkFunction<CreditScoreAggre
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        // Corrected ParameterTool retrieval using specific GlobalJobParameters type
-        org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters jobParameters = 
-            getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-            
-        if (jobParameters == null) {
-            throw new RuntimeException("Required GlobalJobParameters not found.");
+        // Correct way to get ParameterTool using GlobalJobParameters
+        GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        if (globalJobParameters == null) {
+            throw new RuntimeException("Global job parameters not found.");
         }
-        try {
-             java.util.Map<String, String> map = jobParameters.toMap();
-             if (map == null) {
-                  throw new RuntimeException("GlobalJobParameters.toMap() returned null.");
-             }
-             params = ParameterTool.fromMap(map);
-             if (params == null) {
-                 // ParameterTool.fromMap might return null/empty if map is empty, check required params later
-                 throw new RuntimeException("ParameterTool could not be created from job parameters map.");
-             }
-        } catch (UnsupportedOperationException e) {
-             LOG.error("Could not convert GlobalJobParameters to map.", e);
-             throw new RuntimeException("Could not convert GlobalJobParameters to map.", e);
+        // Create ParameterTool from the map
+        this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+        
+        if (params == null) {
+             // This check might be redundant if toMap() never returns null, but good for safety
+             throw new RuntimeException("ParameterTool could not be created from job parameters map.");
         }
 
         final String jdbcUrl = params.getRequired(ParameterNames.CLICKHOUSE_JDBC_URL);
-        // Optional: Add user/password retrieval from params if needed
+        final String user = params.getRequired(ParameterNames.CLICKHOUSE_USER);
+        final String password = params.getRequired(ParameterNames.CLICKHOUSE_PASSWORD);
 
         try {
-            // Pass null properties for now
-            repository = new ClickHouseRepository(jdbcUrl, null);
+            // Pass URL, user, and password to the repository
+            repository = new ClickHouseRepository(jdbcUrl, user, password);
             LOG.info("ClickHouse Credit Score Sink initialized (URL: {}).", jdbcUrl);
         } catch (Exception e) {
-            LOG.error("Failed to initialize ClickHouse connection", e);
+            LOG.error("Failed to initialize ClickHouse connection for CreditScoreSink", e);
             throw new RuntimeException("Failed to initialize ClickHouse connection", e);
         }
     }

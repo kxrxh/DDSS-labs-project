@@ -5,7 +5,6 @@ resource "helm_release" "redpanda" {
 
   repository       = "https://charts.redpanda.com/"
   chart            = "redpanda"
-  version          = var.chart_version
 
   # Basic values for a dev setup. Customize as needed.
   # Refer to the Redpanda Helm chart documentation for all options:

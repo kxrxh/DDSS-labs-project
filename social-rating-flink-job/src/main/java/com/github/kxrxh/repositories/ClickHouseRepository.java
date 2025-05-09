@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 // Add necessary model imports
 import com.github.kxrxh.model.EventAggregate;
@@ -27,27 +28,24 @@ public class ClickHouseRepository implements AutoCloseable {
 
     private Connection connection;
 
-    // Default constructor is not supported - requires a JDBC URL.
-    @Deprecated // Mark as deprecated, prefer explicit URL constructor
+    // Default constructor is not supported - requires connection details.
+    @Deprecated
     public ClickHouseRepository() {
-         throw new UnsupportedOperationException("ClickHouseRepository requires a JDBC URL. Use the constructor ClickHouseRepository(String jdbcUrl).");
+        throw new UnsupportedOperationException("ClickHouseRepository requires JDBC URL, user, and password.");
     }
 
     /**
      * Constructs a ClickHouseRepository and establishes a connection.
-     * Reads credentials (user/password) from environment variables CLICKHOUSE_USER and CLICKHOUSE_PASSWORD.
      *
      * @param jdbcUrl The base ClickHouse JDBC URL (e.g., "jdbc:clickhouse://host:port/database")
-     * @throws RuntimeException if the JDBC driver is not found, credentials are missing, or connection fails.
+     * @param user The ClickHouse username.
+     * @param password The ClickHouse password.
+     * @throws RuntimeException if the JDBC driver is not found, connection details are invalid, or connection fails.
      */
-    public ClickHouseRepository(String jdbcUrl) {
+    public ClickHouseRepository(String jdbcUrl, String user, String password) {
         try {
             // Ensure the JDBC driver is loaded
             Class.forName(CLICKHOUSE_DRIVER);
-
-            // Get credentials from environment variables
-            String user = System.getenv("CLICKHOUSE_USER");
-            String password = System.getenv("CLICKHOUSE_PASSWORD");
 
             // Validate required environment variables
             if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
@@ -55,24 +53,17 @@ public class ClickHouseRepository implements AutoCloseable {
                  throw new IllegalArgumentException("ClickHouse JDBC URL cannot be null or empty.");
             }
             if (user == null || user.trim().isEmpty()) {
-                LOG.error("ClickHouse user environment variable CLICKHOUSE_USER is not set or empty.");
-                throw new RuntimeException("ClickHouse user environment variable CLICKHOUSE_USER is not set or empty.");
+                LOG.error("ClickHouse user provided is null or empty.");
+                throw new IllegalArgumentException("ClickHouse user cannot be null or empty.");
             }
              if (password == null) {
-                 // Decide how to handle missing password. ClickHouse can allow empty passwords.
-                 // For a specific user like 'kxrxh', it's safer to assume a password is required.
-                 // If an empty password *is* valid for this user, set password = "" here instead of throwing.
-                 LOG.error("ClickHouse password environment variable CLICKHOUSE_PASSWORD is not set.");
-                 throw new RuntimeException("ClickHouse password environment variable CLICKHOUSE_PASSWORD is not set.");
-                 // Alternatively, allow empty password:
-                 // LOG.warn("ClickHouse password environment variable CLICKHOUSE_PASSWORD is not set. Using empty password.");
-                 // password = "";
+                 LOG.warn("ClickHouse password provided is null. Using empty string for connection.");
+                 password = ""; // Use empty string if password is null
              }
 
             LOG.info("Attempting to connect to ClickHouse at [{}] with user [{}]", jdbcUrl, user);
 
             // Establish connection using URL and credentials from Env Vars
-            // Note: DriverManager requires URL, user, password arguments for authentication.
             this.connection = DriverManager.getConnection(jdbcUrl, user, password);
 
             // Disable auto-commit for potential batching later
@@ -96,17 +87,6 @@ public class ClickHouseRepository implements AutoCloseable {
             throw new RuntimeException("Unexpected error initializing ClickHouse repository", e);
         }
     }
-
-     /**
-      * Deprecated constructor. Use {@link #ClickHouseRepository(String)} instead.
-      * @param jdbcUrl The JDBC URL.
-      * @param properties Not used for credentials anymore.
-      */
-     @Deprecated
-     public ClickHouseRepository(String jdbcUrl, java.util.Properties properties) { // Explicitly import Properties
-         this(jdbcUrl); // Delegate to the main constructor
-         LOG.warn("Constructor ClickHouseRepository(String, Properties) is deprecated. Properties argument is ignored for credentials.");
-     }
 
     /**
      * Saves EventAggregate data to the events_aggregate table.
@@ -289,6 +269,100 @@ public class ClickHouseRepository implements AutoCloseable {
             } finally {
                 connection = null; // Ensure connection is set to null
             }
+        }
+    }
+
+    /**
+     * Creates the score_velocity_metrics table if it doesn't exist.
+     * @throws SQLException if a database access error occurs.
+     */
+    public void createVelocityTableIfNotExists() throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS score_velocity_metrics (" +
+                     "    window_end DateTime64(3), " +
+                     "    region LowCardinality(String), " +
+                     "    city LowCardinality(String), " +
+                     "    district LowCardinality(String), " +
+                     "    score_change_1h Float64, " +
+                     "    score_change_24h Float64, " +
+                     "    positive_events_1h UInt64, " +
+                     "    negative_events_1h UInt64" +
+                     ") ENGINE = MergeTree() " +
+                     "ORDER BY (region, city, district, window_end)";
+
+        executeCreateTableStatement(sql, "score_velocity_metrics");
+    }
+
+    /**
+     * Creates the events_aggregate table if it doesn't exist.
+     * @throws SQLException if a database access error occurs.
+     */
+    public void createEventAggregateTableIfNotExists() throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS events_aggregate (" +
+                     "    window_end DateTime64(3), " +
+                     "    region LowCardinality(String), " +
+                     "    city LowCardinality(String), " +
+                     "    district LowCardinality(String), " +
+                     "    event_type LowCardinality(String), " +
+                     "    event_subtype LowCardinality(String), " +
+                     "    age_group LowCardinality(String), " +
+                     "    gender LowCardinality(String), " +
+                     "    event_count UInt64, " +
+                     "    total_score_impact Float64, " +
+                     "    avg_score_impact Float64, " +
+                     "    citizen_count UInt64" + // Renamed from distinctCitizenCount for clarity
+                     ") ENGINE = MergeTree() " +
+                     "ORDER BY (region, city, district, event_type, event_subtype, age_group, gender, window_end)";
+
+        executeCreateTableStatement(sql, "events_aggregate");
+    }
+
+    /**
+     * Creates the social_graph_aggregate table if it doesn't exist.
+     * @throws SQLException if a database access error occurs.
+     */
+    public void createSocialGraphTableIfNotExists() throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS social_graph_aggregate (" +
+                     "    window_end DateTime64(3), " +
+                     "    region LowCardinality(String), " +
+                     "    city LowCardinality(String), " +
+                     "    district LowCardinality(String), " +
+                     "    age_group LowCardinality(String), " +
+                     "    gender LowCardinality(String), " +
+                     "    total_relations UInt64, " +
+                     "    avg_relations_per_citizen Float64" +
+                     ") ENGINE = MergeTree() " +
+                     "ORDER BY (region, city, district, age_group, gender, window_end)";
+
+        executeCreateTableStatement(sql, "social_graph_aggregate");
+    }
+
+    /**
+     * Helper method to execute a CREATE TABLE statement.
+     * @param sql The SQL statement to execute.
+     * @param tableName The name of the table being created (for logging).
+     * @throws SQLException if a database access error occurs.
+     */
+    private void executeCreateTableStatement(String sql, String tableName) throws SQLException {
+        LOG.info("Attempting to create table '{}' if it does not exist.", tableName);
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(sql);
+            // Commit the CREATE TABLE statement immediately
+            if (!connection.getAutoCommit()) {
+                 connection.commit();
+            }
+            LOG.info("Table '{}' check/creation successful.", tableName);
+        } catch (SQLException e) {
+            LOG.error("Failed to create table '{}'. Error: {}", tableName, e.getMessage(), e);
+            // Attempt to rollback if auto-commit is off
+            if (!connection.getAutoCommit()) {
+                try {
+                    connection.rollback();
+                    LOG.warn("Rolled back transaction after failed table creation for '{}'.", tableName);
+                } catch (SQLException rbEx) {
+                    LOG.error("Failed to rollback transaction after failed table creation for '{}'.", tableName, rbEx);
+                }
+            }
+            throw e; // Re-throw the exception
         }
     }
 }

@@ -15,11 +15,11 @@ variable "create_namespace" {
   default     = false
 }
 
-variable "chart_version" {
-  description = "Version of the InfluxDB Helm chart to use."
-  type        = string
-  default     = "2.1.2" # Specify a recent, known working version
-}
+# variable "chart_version" {
+#   description = "Version of the InfluxDB Helm chart to use."
+#   type        = string
+#   default     = "2.1.2" # Specify a recent, known working version
+# }
 
 variable "persistence_enabled" {
   description = "Enable persistence using PersistentVolumes."

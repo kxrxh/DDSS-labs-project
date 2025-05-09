@@ -23,9 +23,3 @@ resource "helm_release" "flink_operator" {
 
   timeout = 600 # 10 minutes
 }
-
-# Note: This module only deploys the Flink Operator.
-# Actual Flink jobs (FlinkDeployment or FlinkSessionJob resources)
-# need to be defined separately, typically as Kubernetes manifests
-# or potentially using the kubernetes_manifest resource in Terraform
-# (if the CRDs are installed by the operator first).

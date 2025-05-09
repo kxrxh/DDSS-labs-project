@@ -6,7 +6,7 @@ metadata:
   namespace: dev-flink-jobs # Target namespace watched by the operator
 spec:
   # Use a standard Flink image matching your Flink version
-  image: flink:1.20-scala_2.12-java11 
+  image: flink:1.20.1-scala_2.12-java17 # Updated to Java 17 image with patch version
   flinkVersion: v1_20 # Matches the base image and pom.xml Flink version
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
@@ -37,14 +37,6 @@ spec:
         - name: flink-job-jar-hostpath
           mountPath: /opt/flink/usrlib # Mount into Flink's standard user lib dir
           # readOnly: true # Optional: mount as read-only
-
-        # Define environment variables for ClickHouse credentials
-        # These should be merged into both JM and TM by the operator
-        env:
-        - name: CLICKHOUSE_USER
-          value: "kxrxh"
-        - name: CLICKHOUSE_PASSWORD
-          value: "mycoolpassword"
 
   jobManager:
     resource:
@@ -109,54 +101,59 @@ spec:
     jarURI: local:///opt/flink/usrlib/social-rating-flink-job.jar 
     entryClass: "com.github.kxrxh.DataStreamJob" # Main class from pom.xml
     args: [
-      # Kafka/Redpanda
-      "--kafka.brokers", "dev-redpanda.dev-streaming.svc.cluster.local:9093",
-      "--kafka.input.topic", "input_events", # <-- FIXME: Verify topic name
-      "--kafka.consumer.group", "social-rating-group", # <-- FIXME: Verify group name
-      "--kafka.secondary.update.topic", "secondary_updates", # <-- FIXME: Verify topic name
-      # MongoDB - Corrected Hostname
+      # Kafka/Redpanda Configuration (Consolidated)
+      # Verify these broker addresses and topic names
+      "--kafka.brokers", "dev-redpanda.dev-streaming.svc.cluster.local:9093", # Changed to service address
+      "--kafka.input.brokers", "dev-redpanda.dev-streaming.svc.cluster.local:9093", # Changed to service address
+      "--kafka.output.brokers", "dev-redpanda.dev-streaming.svc.cluster.local:9093", # Changed to service address
+      "--kafka.input.topic", "input_events", 
+      "--kafka.consumer.group", "social-rating-job-consumer",
+      "--kafka.secondary.update.topic", "secondary_updates",
+      
+      # MongoDB Configuration (Consolidated)
+      # Verify DB name and collection names
       "--mongo.uri", "mongodb://mongodb-service.dev-db.svc.cluster.local:27017",
-      "--mongo.db.name", "social_rating", # <-- FIXME: Verify DB name
+      "--mongo.db.name", "social_rating", 
       "--mongo.polling.interval.seconds", "60",
-      # Dgraph
-      "--dgraph.uri", "dev-dgraph-alpha.dev-db.svc.cluster.local:9080",
-      # InfluxDB - Corrected Port
+      "--mongo.rules.collection", "scoring_rules",
+      "--mongo.snapshots.collection", "citizen_snapshots",
+      "--mongo.timestamps.collection", "citizen_first_seen",
+
+      # Dgraph Configuration (Consolidated)
+      # Verify correct Dgraph address/URI - There were two different ones specified previously
+      # Using --dgraph.address value: "dgraph-alpha.dev-db.svc.cluster.local:9080"
+      "--dgraph.uri", "dgraph-alpha.dev-db.svc.cluster.local:9080", # <-- Verify this hostname/port
+      
+      # InfluxDB Configuration (Consolidated)
+      # Verify URL, org, and bucket
       "--influxdb.url", "http://dev-influxdb-influxdb2.dev-analytics.svc.cluster.local:80",
-      "--influxdb.token", "YOUR_INFLUXDB_TOKEN", # <-- FIXME: Replace with actual token
-      "--influxdb.org", "primary",           
-      "--influxdb.bucket", "flink_data",     
-      # ClickHouse - Corrected Hostname & Added Credentials Placeholders
-      "--clickhouse.jdbc.url", "jdbc:clickhouse://clickhouse-dev-clickhouse.dev-analytics.svc.cluster.local:8123/default",
-      # Async Defaults (Adjust if needed)
+      "--influxdb.token", "my-super-secret-auth-token", # Using specific token from later args
+      "--influxdb.org", "social-rating-org",           # Using specific org from later args
+      "--influxdb.bucket", "social-rating-bucket",     # Using specific bucket from later args
+      
+      # ClickHouse Configuration 
+      # FIXME: Verify this JDBC URL. The hostname caused UnknownHostException in logs.
+      # Check the correct Kubernetes service name and namespace for ClickHouse.
+      "--clickhouse.jdbc.url", "jdbc:clickhouse://clickhouse-dev-clickhouse.dev-analytics.svc.cluster.local:8123", 
+      "--clickhouse.user", "default",
+      "--clickhouse.password", "SomeStrongPassword", # Added placeholder password
+      
+      # Async Defaults 
       "--async.enrich.demographics.timeout.ms", "5000",
       "--async.enrich.demographics.capacity", "100",
       "--async.enrich.relation.timeout.ms", "5000",
       "--async.enrich.relation.capacity", "100",
       "--async.related.effect.timeout.ms", "5000",
       "--async.related.effect.capacity", "50",
-      "-Dlog4j.configurationFile=file:/opt/flink/conf/log4j-console.properties",
-      "--job.name", "Social Rating Flink Job",
-      # Input Topics
-      "--kafka.input.brokers", "dev-redpanda-0.dev-redpanda.dev-streaming.svc.cluster.local:9093",
-      "--kafka.input.topic", "input_events",
-      "--kafka.input.group.id", "social-rating-job-consumer",
-      # Output Topics
-      "--kafka.output.brokers", "dev-redpanda-0.dev-redpanda.dev-streaming.svc.cluster.local:9093",
-      "--kafka.output.topic", "secondary_updates",
-      # MongoDB Config
-      "--mongo.rules.collection", "scoring_rules",
-      "--mongo.snapshots.collection", "citizen_snapshots",
-      "--mongo.timestamps.collection", "citizen_first_seen",
-      # Dgraph Config
-      "--dgraph.address", "dgraph-alpha.dev-db.svc.cluster.local:9080",
-      # InfluxDB Config
-      "--influxdb.url", "http://dev-influxdb-influxdb2.dev-analytics.svc.cluster.local:80",
-      "--influxdb.token", "my-super-secret-auth-token", # Replace with actual token if needed
-      "--influxdb.org", "social-rating-org",
-      "--influxdb.bucket", "social-rating-bucket",
-      # Enrichment Config
+      
+      # Enrichment Cache Config
       "--enrichment.demographics.cache.ttl.seconds", "300",
-      "--enrichment.relations.cache.ttl.seconds", "60"
+      "--enrichment.relations.cache.ttl.seconds", "60",
+
+      # Job Configuration
+      "-Dlog4j.configurationFile=file:/opt/flink/conf/log4j-console.properties",
+      "--job.name", "Social Rating Flink Job"
+      # Removed duplicated/conflicting arguments below this line
     ]
     parallelism: 2 # Set desired parallelism
     upgradeMode: stateless # Use 'savepoint' if your job maintains state

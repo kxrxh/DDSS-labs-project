@@ -33,26 +33,44 @@ public class ClickHouseSocialGraphSink extends RichSinkFunction<SocialGraphAggre
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
         
-        // Correct way to get ParameterTool using GlobalJobParameters
-        GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-        
-        if (globalJobParameters == null) {
-            throw new RuntimeException("Global job parameters not found.");
+        // Attempt 1: Get parameters directly from the Configuration object passed to open()
+        try {
+             this.params = ParameterTool.fromMap(parameters.toMap());
+             if (params.getNumberOfParameters() == 0) {
+                  LOG.warn("ParameterTool created from Configuration.toMap() is empty in ClickHouseSocialGraphSink. Falling back.");
+                  throw new RuntimeException("Empty params from Configuration.toMap()"); // Force fallback
+             }
+             LOG.info("Successfully obtained parameters using Configuration.toMap() in ClickHouseSocialGraphSink.");
+        } catch (Exception e) {
+             LOG.warn("Failed to get parameters using Configuration.toMap() in ClickHouseSocialGraphSink, trying GlobalJobParameters. Error: {}", e.getMessage());
+             // Attempt 2: Fallback to using GlobalJobParameters
+             GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+             if (globalJobParameters == null) {
+                 throw new RuntimeException("Global job parameters not found on fallback in ClickHouseSocialGraphSink.", e);
+             }
+             try {
+                 this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+                 LOG.info("Successfully obtained parameters using GlobalJobParameters.toMap() on fallback in ClickHouseSocialGraphSink.");
+             } catch (Exception e2) {
+                  LOG.error("Failed to obtain parameters using both methods in ClickHouseSocialGraphSink.", e2);
+                  throw new RuntimeException("Failed to create ParameterTool using both Configuration.toMap and GlobalJobParameters.toMap in ClickHouseSocialGraphSink.", e2);
+             }
         }
-        
-        // Create ParameterTool from the map provided by GlobalJobParameters
-        this.params = ParameterTool.fromMap(globalJobParameters.toMap());
-        
-        if (this.params == null) {
-             // This check might be redundant if toMap() never returns null, but good for safety
-             throw new RuntimeException("ParameterTool could not be created from job parameters map.");
+
+        // Final check if params is usable
+        if (params == null || params.getNumberOfParameters() == 0) {
+            throw new RuntimeException("ParameterTool could not be created or is empty after trying both methods in ClickHouseSocialGraphSink.");
         }
+
+        LOG.info("ClickHouseSocialGraphSink received parameters: {}", params.toMap()); // Log received parameters
 
         final String jdbcUrl = params.getRequired(ParameterNames.CLICKHOUSE_JDBC_URL);
-        // Optional: Add user/password retrieval if needed
+        final String user = params.getRequired(ParameterNames.CLICKHOUSE_USER);
+        final String password = params.getRequired(ParameterNames.CLICKHOUSE_PASSWORD);
 
         try {
-            repository = new ClickHouseRepository(jdbcUrl, null);
+            repository = new ClickHouseRepository(jdbcUrl, user, password);
+            repository.createSocialGraphTableIfNotExists();
             LOG.info("ClickHouse Social Graph Sink initialized (URL: {}).", jdbcUrl);
         } catch (Exception e) {
             LOG.error("Failed to initialize ClickHouse connection for SocialGraphSink", e);

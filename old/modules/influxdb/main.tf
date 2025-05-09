@@ -5,11 +5,10 @@ resource "helm_release" "influxdb" {
 
   repository       = "https://helm.influxdata.com/"
   chart            = "influxdb2"
-  version          = var.chart_version
 
   values = [
     yamlencode({
-      persistence = {
+      persistence = { 
         enabled = var.persistence_enabled
         size    = var.persistence_size
         # Set storageClassName only if specified, otherwise let Helm/K8s use default

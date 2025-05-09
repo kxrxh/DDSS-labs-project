@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 // Import ParameterTool and constants
 import org.apache.flink.api.java.utils.ParameterTool;
 import com.github.kxrxh.config.ParameterNames;
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
 
 /**
  * Flink SinkFunction to write ScoreSnapshot objects to MongoDB 'citizens' collection.
@@ -31,9 +32,17 @@ public class MongoDbSnapshotSinkFunction extends RichSinkFunction<ScoreSnapshot>
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        params = (ParameterTool) getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        // Correct way to get ParameterTool using GlobalJobParameters
+        GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+        if (globalJobParameters == null) {
+            throw new RuntimeException("Global job parameters not found.");
+        }
+        // Create ParameterTool from the map
+        this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+        
         if (params == null) {
-             throw new RuntimeException("Global job parameters (ParameterTool) not found.");
+             // This check might be redundant if toMap() never returns null, but good for safety
+             throw new RuntimeException("ParameterTool could not be created from job parameters map.");
         }
 
         final String mongoUri = params.getRequired(ParameterNames.MONGO_URI);

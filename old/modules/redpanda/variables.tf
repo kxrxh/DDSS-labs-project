@@ -10,12 +10,6 @@ variable "release_name" {
   default     = "redpanda"
 }
 
-variable "chart_version" {
-  description = "The version of the Redpanda Helm chart to use."
-  type        = string
-  default     = "5.7.2" // Specify a recent, known-good version
-}
-
 variable "create_namespace" {
   description = "Whether the Helm chart should create the namespace."
   type        = bool

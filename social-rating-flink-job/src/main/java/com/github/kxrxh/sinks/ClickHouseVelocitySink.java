@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 // Import ParameterTool and constants
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
 import com.github.kxrxh.config.ParameterNames;
 
 /**
@@ -28,33 +29,45 @@ public class ClickHouseVelocitySink extends RichSinkFunction<ScoreVelocityMetric
     @Override
     public void open(Configuration parameters) throws Exception {
         super.open(parameters);
-        // Corrected ParameterTool retrieval using specific GlobalJobParameters type
-        org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters jobParameters = 
-            getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
-            
-        if (jobParameters == null) {
-            throw new RuntimeException("Required GlobalJobParameters not found.");
-        }
+        
+        // Attempt 1: Get parameters directly from the Configuration object passed to open()
         try {
-             java.util.Map<String, String> map = jobParameters.toMap();
-             if (map == null) {
-                  throw new RuntimeException("GlobalJobParameters.toMap() returned null.");
+             this.params = ParameterTool.fromMap(parameters.toMap());
+             if (params.getNumberOfParameters() == 0) {
+                  LOG.warn("ParameterTool created from Configuration.toMap() is empty in ClickHouseVelocitySink. Falling back.");
+                  throw new RuntimeException("Empty params from Configuration.toMap()"); // Force fallback
              }
-             params = ParameterTool.fromMap(map);
-             if (params == null) {
-                 // ParameterTool.fromMap might return null/empty if map is empty, check required params later
-                 throw new RuntimeException("ParameterTool could not be created from job parameters map.");
+             LOG.info("Successfully obtained parameters using Configuration.toMap() in ClickHouseVelocitySink.");
+        } catch (Exception e) {
+             LOG.warn("Failed to get parameters using Configuration.toMap() in ClickHouseVelocitySink, trying GlobalJobParameters. Error: {}", e.getMessage());
+             // Attempt 2: Fallback to using GlobalJobParameters
+             GlobalJobParameters globalJobParameters = getRuntimeContext().getExecutionConfig().getGlobalJobParameters();
+             if (globalJobParameters == null) {
+                 throw new RuntimeException("Global job parameters not found on fallback in ClickHouseVelocitySink.", e);
              }
-        } catch (UnsupportedOperationException e) {
-             LOG.error("Could not convert GlobalJobParameters to map.", e);
-             throw new RuntimeException("Could not convert GlobalJobParameters to map.", e);
+             try {
+                 this.params = ParameterTool.fromMap(globalJobParameters.toMap());
+                 LOG.info("Successfully obtained parameters using GlobalJobParameters.toMap() on fallback in ClickHouseVelocitySink.");
+             } catch (Exception e2) {
+                  LOG.error("Failed to obtain parameters using both methods in ClickHouseVelocitySink.", e2);
+                  throw new RuntimeException("Failed to create ParameterTool using both Configuration.toMap and GlobalJobParameters.toMap in ClickHouseVelocitySink.", e2);
+             }
         }
+
+        // Final check if params is usable
+        if (params == null || params.getNumberOfParameters() == 0) {
+            throw new RuntimeException("ParameterTool could not be created or is empty after trying both methods in ClickHouseVelocitySink.");
+        }
+
+        LOG.info("ClickHouseVelocitySink received parameters: {}", params.toMap()); // Log received parameters
 
         final String jdbcUrl = params.getRequired(ParameterNames.CLICKHOUSE_JDBC_URL);
-        // Optional: Add user/password retrieval if needed
+        final String user = params.getRequired(ParameterNames.CLICKHOUSE_USER);
+        final String password = params.getRequired(ParameterNames.CLICKHOUSE_PASSWORD);
 
         try {
-            repository = new ClickHouseRepository(jdbcUrl, null);
+            repository = new ClickHouseRepository(jdbcUrl, user, password);
+            repository.createVelocityTableIfNotExists();
             LOG.info("ClickHouse Velocity Sink initialized (URL: {}).", jdbcUrl);
         } catch (Exception e) {
             LOG.error("Failed to initialize ClickHouse connection for VelocitySink", e);
