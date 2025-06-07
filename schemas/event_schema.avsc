@@ -1,0 +1,106 @@
+{
+  "namespace": "com.socialcredit.events",
+  "type": "record",
+  "name": "CitizenEvent",
+  "doc": "Schema for citizen events in the social credit system",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique identifier for the event"
+    },
+    {
+      "name": "citizenId",
+      "type": "string",
+      "doc": "National ID of the citizen"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "doc": "Event timestamp in milliseconds since epoch"
+    },
+    {
+      "name": "eventType",
+      "type": "string",
+      "doc": "Type of event (e.g., payment, social_activity, financial_transaction)"
+    },
+    {
+      "name": "eventSubtype",
+      "type": ["null", "string"],
+      "doc": "Subtype of event (e.g., late_payment, community_service)"
+    },
+    {
+      "name": "sourceSystem",
+      "type": "string",
+      "doc": "System that generated the event"
+    },
+    {
+      "name": "location",
+      "type": {
+        "type": "record",
+        "name": "Location",
+        "fields": [
+          {
+            "name": "region",
+            "type": "string",
+            "doc": "Region where the event occurred"
+          },
+          {
+            "name": "city",
+            "type": ["null", "string"],
+            "doc": "City where the event occurred"
+          },
+          {
+            "name": "latitude",
+            "type": ["null", "double"],
+            "doc": "Latitude coordinate"
+          },
+          {
+            "name": "longitude",
+            "type": ["null", "double"],
+            "doc": "Longitude coordinate"
+          }
+        ]
+      },
+      "doc": "Location information for the event"
+    },
+    {
+      "name": "severity",
+      "type": "double",
+      "doc": "Severity of the event (0.0 to 1.0)"
+    },
+    {
+      "name": "confidence",
+      "type": "double",
+      "doc": "Confidence in the event data (0.0 to 1.0)"
+    },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "EventPayload",
+        "fields": [
+          {
+            "name": "amount",
+            "type": ["null", "double"],
+            "doc": "Amount for financial events"
+          },
+          {
+            "name": "description",
+            "type": ["null", "string"],
+            "doc": "Human-readable description of the event"
+          },
+          {
+            "name": "metadata",
+            "type": {
+              "type": "map",
+              "values": "string"
+            },
+            "doc": "Additional event-specific metadata"
+          }
+        ]
+      },
+      "doc": "Event-specific payload data"
+    }
+  ]
+} 

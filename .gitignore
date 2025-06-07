@@ -65,4 +65,5 @@ override.tf.json
 # Include tfplan files to ignore the plan output files
 #
 # example:
-#   *.tfplan
+#   *.tfplanspark/target/*.jar
+spark/target/

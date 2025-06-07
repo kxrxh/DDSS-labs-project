@@ -1,43 +1,79 @@
-type Citizen {
-  id: ID!
-  name: String! @search(by: [exact, term])
-  nationalID: String! @search(by: [exact])
-  currentScore: Int
-  scoreHistory: [ScoreChange]
-  family: [Citizen] @hasInverse(field: family)
-  colleagues: [Citizen] @hasInverse(field: colleagues)
-  friends: [Citizen] @hasInverse(field: friends)
-  location: GeoLocation
-  associationRiskFactor: Float
-  lastUpdated: DateTime
+type CitizenNode {
+  # Use nationalID as the primary way to identify and link CitizenNodes
+  # It must be unique and is how other systems (MongoDB, event streams) will refer to citizens.
+  nationalID: string @id @search(by: [exact]) # @id designates it as the unique key for this type
+  # dgraph.type: "CitizenNode" # Dgraph automatically adds this
+
+  # Relationships - these are the core of Dgraph's role
+  family: [CitizenNode] @hasInverse(field: "family")
+  colleagues: [CitizenNode] @hasInverse(field: "colleagues")
+  friends: [CitizenNode] @hasInverse(field: "friends")
+  # Add other explicit relationship types as needed, e.g.:
+  # businessPartners: [CitizenNode] @hasInverse(field: "businessPartners")
+  # knownAssociates: [CitizenNode] @hasInverse(field: "knownAssociates") # More generic
+
+  # Minimal, graph-relevant attributes that might be updated based on graph analytics or external triggers.
+  # These should be used sparingly and primarily if they are critical for graph traversals or very specific graph-based scores.
+  # Most citizen attributes (name, detailed profile, current overall score) reside in MongoDB.
+  # Score history resides in InfluxDB.
+
+  # Example: A risk factor derived purely from the structure/nature of associations.
+  # This would be calculated by an external process (e.g. Arroyo job analyzing graph + pushing update, or batch process)
+  # associationRiskScore: Float @search # Optional: a score purely from graph structure
+  # lastGraphAnalysisUpdate: DateTime # Timestamp for when graph-specific attributes were last updated
+
+  # Avoid:
+  # - name: String (in MongoDB)
+  # - currentScore: Int (snapshot in MongoDB, history in InfluxDB)
+  # - scoreHistory: [ScoreChange] (full history in InfluxDB)
+  # - location: GeoLocation (profile location in MongoDB, event locations in InfluxDB)
+
+  relationships: [Relationship] @hasInverse(field: citizen)
 }
 
-type ScoreChange {
-  id: ID!
-  timestamp: DateTime!
-  oldScore: Int!
-  newScore: Int!
-  changeAmount: Int!
-  reason: String
-  relatedEvent: EventID
+type Relationship {
+  citizen: CitizenNode
+  relatedTo: CitizenNode
+  relationshipType: string
+  strength: float
+  startDate: datetime
+  endDate: datetime
+  metadata: [KeyValue]
 }
 
-type GeoLocation {
-  id: ID!
-  region: String @search(by: [exact, term])
-  city: String @search(by: [exact, term])
-  district: String @search(by: [exact])
-  coordinates: Point
+type KeyValue {
+  key: string
+  value: string
 }
 
-type EventID {
-  id: ID!
-  sourceSystem: String!
-  eventType: String! @search(by: [exact])
-  externalID: String!
-}
+# Indexes
+nationalID: string @index(exact) .
+relationshipType: string @index(exact) .
+strength: float @index(float) .
+startDate: datetime @index(datetime) .
+endDate: datetime @index(datetime) .
 
-# Директивы для геоданных
-type Point @extends {
-  point: Point @index(point)
-}
+# Example queries:
+# 1. Find all relationships for a citizen
+# {
+#   citizen(func: eq(nationalID, "12345")) {
+#     relationships {
+#       relationshipType
+#       strength
+#       relatedTo {
+#         nationalID
+#       }
+#     }
+#   }
+# }
+
+# 2. Find all citizens with specific relationship type
+# {
+#   var(func: has(relationships)) {
+#     relationships @filter(eq(relationshipType, "family")) {
+#       relatedTo {
+#         nationalID
+#       }
+#     }
+#   }
+# }

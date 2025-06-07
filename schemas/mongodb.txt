@@ -1,125 +1,284 @@
 // Коллекция: citizens
+// Stores core citizen identity and profile information. Score is a snapshot.
 {
-  _id: ObjectId,
-  nationalID: String,        // Уникальный ID гражданина
-  dgraphID: String,          // Ссылка на ID в Dgraph для связи баз данных
-  profile: {
-    name: String,
-    birthDate: Date,
-    gender: String,
-    occupation: String,
-    education: String,
-    maritalStatus: String,
-    income: Number
+  "_id": "ObjectId", // Auto-generated
+  "nationalID": "String", // Unique, indexed. Primary identifier across systems.
+  // "dgraphID": "String", // Potentially remove. Dgraph can use nationalID, or relationships can be established from nationalID.
+  "profile": {
+    "name": "String",
+    "birthDate": "Date", // Or ISODate
+    "gender": "String", // Consider an enum or controlled list
+    "occupation": "String",
+    "education": "String",
+    "maritalStatus": "String", // Consider an enum
+    "incomeBracket": "String" // Changed from income: Number for categorization. Actual income sensitive.
   },
-  scoreSnapshot: {
-    currentScore: Number,
-    tier: String,           // "Образцовый", "Обычный", "Тревожный", "Неблагонадежный"
-    lastCalculated: Date
+  "contactInfo": {
+    "address": { // More structured address
+      "street": "String",
+      "city": "String",
+      "region": "String",
+      "postalCode": "String",
+      "country": "String"
+    },
+    "phone": "String", // Consider validation/standardization
+    "email": "String"  // Consider validation
   },
-  contactInfo: {
-    address: String,
-    phone: String,
-    email: String
+  "flags": { // Simplified: focus on flags that are relatively stable or direct inputs
+    "isPublicOfficial": "Boolean",
+    // "hasFinancialViolations": "Boolean", // This might be derived from events, less of a static flag.
+    // "isUnderInvestigation": "Boolean", // This is also event-driven and time-sensitive.
+    "consentForDataProcessing": "Boolean" // Important for real-world, good for simulation too
   },
-  flags: {                  // Метки, влияющие на расчет баллов
-    isPublicOfficial: Boolean,
-    hasFinancialViolations: Boolean,
-    isUnderInvestigation: Boolean
+  "scoreSnapshot": { // Current score state, updated by Arroyo/processing pipeline
+    "currentScore": "Number",
+    "tier": "String", // e.g., "Tier1", "Tier2" - defined in rule_configurations
+    "lastCalculated": "Date" // ISODate
   },
-  metadata: {
-    createdAt: Date,
-    updatedAt: Date,
-    dataVersion: Number
-  }
-}
-
-// Коллекция: scoring_rules
-{
-  _id: ObjectId,
-  ruleID: String,            // Уникальный идентификатор правила
-  name: String,              // Понятное название правила
-  category: String,          // Категория (финансы, соц. поведение, онлайн-активность и т.д.)
-  eventType: String,         // Тип события, к которому применяется правило
-  condition: {               // Условие для срабатывания правила
-    field: String,
-    operator: String,        // "equals", "greater_than", "less_than", "contains", и т.д.
-    value: Mixed,
-    additionalFilters: [     // Дополнительные фильтры
-      {
-        field: String,
-        operator: String,
-        value: Mixed
+  "metadata": { // Standardized metadata
+    "version": "Number",    // Document version
+    "createdAt": "Date",    // ISODate
+    "updatedAt": "Date",    // ISODate
+    "sourceSystem": "String" // Optional: if this citizen profile was imported
+  },
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["nationalID", "demographicData", "contactInfo", "consentFlags", "scoreSnapshot"],
+      "properties": {
+        "nationalID": {
+          "bsonType": "string",
+          "description": "Unique identifier for the citizen"
+        },
+        "demographicData": {
+          "bsonType": "object",
+          "required": ["age", "gender", "region"],
+          "properties": {
+            "age": { "bsonType": "int" },
+            "gender": { "bsonType": "string" },
+            "region": { "bsonType": "string" }
+          }
+        },
+        "contactInfo": {
+          "bsonType": "object",
+          "required": ["email", "phone"],
+          "properties": {
+            "email": { "bsonType": "string" },
+            "phone": { "bsonType": "string" }
+          }
+        },
+        "consentFlags": {
+          "bsonType": "object",
+          "required": ["dataCollection", "scoreSharing"],
+          "properties": {
+            "dataCollection": { "bsonType": "bool" },
+            "scoreSharing": { "bsonType": "bool" }
+          }
+        },
+        "scoreSnapshot": {
+          "bsonType": "object",
+          "required": ["score", "tier", "lastCalculated"],
+          "properties": {
+            "score": { "bsonType": "double" },
+            "tier": { "bsonType": "string" },
+            "lastCalculated": { "bsonType": "date" }
+          }
+        }
       }
-    ]
-  },
-  points: Number,            // Положительное или отрицательное число баллов
-  multipliers: [             // Множители, которые могут изменить количество баллов
-    {
-      condition: {
-        field: String,
-        operator: String,
-        value: Mixed
-      },
-      factor: Number
     }
-  ],
-  associationEffect: {       // Влияние на связанных граждан (семья, коллеги и т.д.)
-    enabled: Boolean,
-    relationTypes: [String], // Типы отношений, на которые влияет
-    pointsFactor: Number,    // Множитель баллов (обычно меньше 1)
-    maxDepth: Number         // Максимальная глубина в графе отношений
-  },
-  cooldown: {                // Ограничения на частоту применения правила
-    period: Number,
-    unit: String,            // "hours", "days", "weeks"
-    maxApplications: Number
-  },
-  active: Boolean,           // Активно ли правило в данный момент
-  validityPeriod: {          // Период действия правила
-    startDate: Date,
-    endDate: Date
-  },
-  metadata: {
-    createdAt: Date,
-    updatedAt: Date,
-    createdBy: String,
-    version: Number
   }
 }
 
-// Коллекция: rule_configurations
+// Коллекция: scoring_rule_definitions
+// Defines individual rules. Renamed for clarity.
 {
-  _id: ObjectId,
-  configID: String,
-  name: String,
-  description: String,
-  ruleGroups: [
+  "_id": "ObjectId",
+  "ruleID": "String",      // Unique, human-readable ID (e.g., "LATE_PAYMENT_MAJOR")
+  "name": "String",
+  "description": "String",
+  "category": "String",    // e.g., "FINANCIAL", "SOCIAL_BEHAVIOR", "ONLINE_ACTIVITY"
+  "eventType": "String",   // Links to eventType in Avro schema
+  "eventSubtype": ["String"], // Optional: Links to eventSubtype, can be an array if rule applies to multiple
+  "conditionLogic": {      // Simplified and more flexible condition structure
+    "type": "String", // "SIMPLE" (single condition), "AND", "OR", "COMPLEX" (e.g., custom UDF in Arroyo)
+    "conditions": [ // Array of conditions for AND/OR. For "SIMPLE", only one.
+      {
+        "field": "String",    // Field from the event payload (e.g., "payload.amount", "payload.violation_type")
+        "operator": "String", // e.g., "EQUALS", "GREATER_THAN", "CONTAINS", "REGEX_MATCH"
+        "value": "Mixed"      // The value to compare against
+      }
+    ],
+    "customLogicIdentifier": "String" // For type="COMPLEX", refers to a UDF or specific logic block in Arroyo
+  },
+  "points": "Number",        // Base points (positive or negative)
+  "multipliers": [           // Simpler structure for multipliers
     {
-      groupName: String,
-      rules: [String],      // Массив ruleID из коллекции scoring_rules
-      weightMultiplier: Number
+      "name": "String",      // e.g., "Public Official Multiplier"
+      "factor": "Number",   // e.g., 1.5, 0.8
+      "appliesIfFlag": "String" // e.g., "isPublicOfficial" (links to citizen.flags)
+      // Or more complex conditions if necessary, but try to keep simple
     }
   ],
-  baselineScore: Number,     // Начальное значение баллов для нового гражданина
-  tierThresholds: {          // Пороговые значения для каждого уровня
-    excellent: Number,
-    standard: Number,
-    concerning: Number,
-    untrusted: Number
+  // "associationEffect": { ... }, // DEFERRED/SIMPLIFIED: This is complex. For v1, perhaps remove or make very simple
+                                 // If kept simple: "affectsFamily": true, "pointsFactor": 0.1
+  "cooldown": { // How often this rule can affect the same citizen
+    "periodSeconds": "Number", // e.g., 86400 (1 day), 604800 (1 week)
+    "maxApplicationsInPeriod": "Number" // Default to 1 if not specified
   },
-  decayRules: {              // Правила "забывания" со временем
-    enabled: Boolean,
-    halfLifePeriod: Number,
-    halfLifeUnit: String,   // "days", "weeks", "months"
-    minimumDecay: Number    // Минимальный процент забывания
+  "tags": ["String"], // For searching/grouping rules, e.g., ["critical", "financial_penalty"]
+  "status": "String", // "ACTIVE", "INACTIVE", "TESTING"
+  "validityPeriod": {
+    "startDate": "Date", // ISODate
+    "endDate": "Date"   // ISODate, optional (null for indefinite)
   },
-  active: Boolean,
-  metadata: {
-    activeFrom: Date,
-    activeTo: Date,
-    createdAt: Date,
-    updatedAt: Date,
-    version: Number
+  "metadata": { // Standardized metadata
+    "version": "Number",
+    "createdAt": "Date",
+    "updatedAt": "Date",
+    "createdBy": "String", // User/system ID
+    "updatedBy": "String"
+  },
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["ruleId", "conditions", "points", "multipliers", "cooldowns", "status", "validity"],
+      "properties": {
+        "ruleId": {
+          "bsonType": "string",
+          "description": "Unique identifier for the rule"
+        },
+        "conditions": {
+          "bsonType": "array",
+          "items": {
+            "bsonType": "object",
+            "required": ["field", "operator", "value"],
+            "properties": {
+              "field": { "bsonType": "string" },
+              "operator": { "bsonType": "string" },
+              "value": { "bsonType": ["string", "number", "bool"] }
+            }
+          }
+        },
+        "points": {
+          "bsonType": "object",
+          "required": ["base", "max"],
+          "properties": {
+            "base": { "bsonType": "double" },
+            "max": { "bsonType": "double" }
+          }
+        },
+        "multipliers": {
+          "bsonType": "array",
+          "items": {
+            "bsonType": "object",
+            "required": ["condition", "factor"],
+            "properties": {
+              "condition": { "bsonType": "string" },
+              "factor": { "bsonType": "double" }
+            }
+          }
+        },
+        "cooldowns": {
+          "bsonType": "object",
+          "required": ["duration", "type"],
+          "properties": {
+            "duration": { "bsonType": "int" },
+            "type": { "bsonType": "string" }
+          }
+        },
+        "status": {
+          "bsonType": "string",
+          "enum": ["active", "inactive", "deprecated"]
+        },
+        "validity": {
+          "bsonType": "object",
+          "required": ["startDate", "endDate"],
+          "properties": {
+            "startDate": { "bsonType": "date" },
+            "endDate": { "bsonType": "date" }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Коллекция: system_configuration
+// Global settings for the scoring system. Consolidates parts of old 'rule_configurations'.
+{
+  "_id": "ObjectId", // Could be a single document with a known ID, e.g., "active_config"
+  "configID": "String", // e.g., "v1_default_config"
+  "name": "String",
+  "description": "String",
+  "activeRuleSet": { // Defines which rules are part of this configuration
+    // Option 1: List of active ruleIDs
+    "ruleIDs": ["String"], // Array of ruleID from scoring_rule_definitions
+    // Option 2: Based on tags
+    // "includeTags": ["String"],
+    // "excludeTags": ["String"]
+  },
+  "baselineScore": "Number", // Starting score for new citizens
+  "tierDefinitions": [      // Flexible tier definitions
+    {
+      "tierName": "String",        // e.g., "Exemplary", "Standard", "Caution", "HighRisk"
+      "minScore": "Number",        // Inclusive minimum score for this tier
+      "maxScore": "Number",        // Inclusive maximum score for this tier
+      "description": "String"
+    }
+  ],
+  "scoreDecayPolicy": {    // Simplified score decay
+    "enabled": "Boolean",
+    "pointsToDecayPerDay": "Number", // Or per week/month
+    // "halfLifePeriodDays": "Number", // Alternative model
+    "minimumScoreToApplyDecay": "Number" // e.g., don't decay scores below 0
+  },
+  "status": "String", // "ACTIVE", "DRAFT"
+  "metadata": { // Standardized metadata
+    "version": "Number",
+    "createdAt": "Date",
+    "updatedAt": "Date",
+    "activatedAt": "Date", // When this config became active
+    "deactivatedAt": "Date" // When this config was superseded
+  },
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["baselineScore", "tierDefinitions", "activeRuleSet", "scoreDecayPolicy"],
+      "properties": {
+        "baselineScore": {
+          "bsonType": "double",
+          "description": "Default score for new citizens"
+        },
+        "tierDefinitions": {
+          "bsonType": "array",
+          "items": {
+            "bsonType": "object",
+            "required": ["tier", "minScore", "maxScore", "benefits"],
+            "properties": {
+              "tier": { "bsonType": "string" },
+              "minScore": { "bsonType": "double" },
+              "maxScore": { "bsonType": "double" },
+              "benefits": {
+                "bsonType": "array",
+                "items": { "bsonType": "string" }
+              }
+            }
+          }
+        },
+        "activeRuleSet": {
+          "bsonType": "array",
+          "items": { "bsonType": "string" }
+        },
+        "scoreDecayPolicy": {
+          "bsonType": "object",
+          "required": ["rate", "interval", "minScore"],
+          "properties": {
+            "rate": { "bsonType": "double" },
+            "interval": { "bsonType": "string" },
+            "minScore": { "bsonType": "double" }
+          }
+        }
+      }
+    }
   }
 } 

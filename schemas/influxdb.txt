@@ -1,3 +1,170 @@
+// InfluxDB 2.x/3.x Schema and Data Layout Description
+// This document outlines the intended Buckets, Measurements, Tags, Fields,
+// and the logic for Flux Tasks.
+
+// ========================================================================
+// BUCKETS
+// ========================================================================
+
+// Bucket 1: "raw_events"
+// Purpose: Store incoming raw (or minimally processed) citizen events.
+// Retention: Relatively short (e.g., 30-90 days, adjust based on query needs and volume).
+// Data Source: Written to by the Arroyo pipeline.
+// ---
+
+// Bucket 2: "derived_metrics"
+// Purpose: Store aggregated data, score history, and longer-term analytical metrics.
+// Retention: Longer (e.g., 1-2 years for detailed citizen metrics, 5+ years for system aggregates).
+// Data Source: Primarily written to by Flux Tasks processing data from "raw_events",
+//              and potentially by batch jobs for graph-derived metrics.
+// ---
+
+// Bucket 3: "long_term_archives" (Optional)
+// Purpose: Store downsampled, summarized data for very long-term trends (e.g., yearly summaries).
+// Retention: Very long (e.g., 7-10+ years).
+// Data Source: Written to by Flux Tasks processing data from "derived_metrics".
+
+// ========================================================================
+// MEASUREMENTS, TAGS, and FIELDS
+// (Timestamp for all data points is the InfluxDB `_time` field)
+// ========================================================================
+
+// --- Measurement in "raw_events" Bucket ---
+// _measurement: "citizen_event" (Represents an incoming event from event_schema.avsc)
+
+//   Tags (for indexing and filtering):
+//     citizenID: STRING       (Corresponds to nationalID, identifying the citizen)
+//     eventID: STRING         (Unique ID of the event from Avro schema)
+//     eventType: STRING       (e.g., 'FINANCIAL', 'SOCIAL', 'LEGAL', from Avro)
+//     eventSubtype: STRING    (e.g., 'LOAN_DEFAULT', 'VOLUNTEERING', from Avro, optional)
+//     sourceSystem: STRING    (e.g., 'BANK_XYZ', 'CITY_PORTAL', from Avro)
+//     // Location tags from Avro event.location (if present and useful)
+//     eventRegion: STRING     (Optional)
+//     eventCity: STRING       (Optional)
+//     // --- Handling Avro 'payload' map ---
+//     // Arroyo should extract known, low-cardinality keys from the Avro 'payload'
+//     // that are frequently used for filtering and write them as tags.
+//     // Example: If payload often has 'transaction_category':
+//     // payload_transaction_category: STRING (Tag)
+
+//   Fields (the actual data values):
+//     // Geo-coordinates from Avro event.location
+//     eventLatitude: FLOAT    (Optional)
+//     eventLongitude: FLOAT   (Optional)
+//     // --- Handling Avro 'payload' map ---
+//     // Arroyo should extract known keys from the Avro 'payload', parse them to their
+//     // correct types, and write them as distinct fields.
+//     // Example: If payload has 'amount' and 'description':
+//     // payload_amount: FLOAT
+//     // payload_description: STRING
+//     // payload_item_count: INTEGER
+//     // payload_is_fraudulent: BOOLEAN
+//     // For any remaining, less-structured, or highly variable payload data:
+//     payload_full_json: STRING (Stores the complete Avro 'payload' as a JSON string for archival/audit if needed. Not for primary querying.)
+//     // Original event timestamp from Avro (Arroyo will map this to InfluxDB's `_time` on ingest)
+
+
+// --- Measurements in "derived_metrics" Bucket ---
+
+// _measurement: "score_change_history"
+//   Tags:
+//     citizenID: STRING
+//     reasonCategory: STRING  (e.g., "EVENT_IMPACT", "DECAY_ADJUSTMENT", "MANUAL_CORRECTION")
+//     triggeringRuleID: STRING (ID of the scoring_rule_definition from MongoDB, if applicable)
+//   Fields:
+//     oldScore: INTEGER
+//     newScore: INTEGER
+//     changeAmount: INTEGER
+//     relatedEventID: STRING (Link to citizen_event.eventID if an event caused this change, optional)
+//     description: STRING   (Brief description of why the score changed)
+
+// _measurement: "citizen_activity_hourly"
+//   Tags:
+//     citizenID: STRING
+//   Fields:
+//     eventCount: INTEGER       (Total events for this citizen in the hour)
+//     netScoreImpact: INTEGER   (Sum of score_impacts from events in the hour)
+//     // Other specific hourly aggregates if needed
+
+// _measurement: "citizen_summary_daily"
+//   Tags:
+//     citizenID: STRING
+//     currentTier: STRING     (Citizen's score tier at the end of the day, from MongoDB snapshot)
+//   Fields:
+//     dayEndScore: INTEGER    (Citizen's score at end of day, from MongoDB snapshot)
+//     eventsTodayCount: INTEGER
+//     netScoreChangeToday: INTEGER
+//     // Other daily citizen metrics (e.g., specific activity type counts)
+
+// _measurement: "system_aggregates_daily"
+//   Tags:
+//     region: STRING          (Optional, for regional aggregates. Use "ALL" for system-wide)
+//     city: STRING            (Optional)
+//     // Potentially other dimensions like 'eventType' if aggregating by that
+//   Fields:
+//     averageScore: FLOAT
+//     medianScore: FLOAT
+//     minScoreObserved: INTEGER
+//     maxScoreObserved: INTEGER
+//     activeCitizensCount: INTEGER // Count of citizens included in this aggregate
+//     // Counts for citizens in each tier, e.g.:
+//     tier_exemplary_count: INTEGER
+//     tier_standard_count: INTEGER
+//     tier_caution_count: INTEGER
+//     tier_highrisk_count: INTEGER
+
+// _measurement: "social_graph_derived_metrics" (Data pushed from Dgraph analysis job)
+//   Tags:
+//     citizenID: STRING
+//     // relationType: STRING (e.g. "family_avg_score", "colleague_risk_factor")
+//   Fields:
+//     avgFamilyScore: FLOAT   (Example: Average score of family members)
+//     colleagueNetworkDensity: FLOAT (Example)
+//     // Other metrics derived from graph analysis, trended over time
+
+
+// ========================================================================
+// FLUX TASKS (Conceptual Logic - to be implemented in InfluxDB)
+// ========================================================================
+
+// Task 1: "Generate Citizen Hourly Activity"
+//   Trigger: Every hour.
+//   Input: Reads from "raw_events" bucket, "citizen_event" measurement for the past hour.
+//   Logic:
+//     - Groups by `citizenID` and `window(period: 1h)`.
+//     - Calculates `count()` of events, `sum()` of `payload_score_impact_value` (assuming Arroyo extracts this).
+//   Output: Writes to "derived_metrics" bucket, "citizen_activity_hourly" measurement.
+
+// Task 2: "Generate Citizen Daily Summary"
+//   Trigger: Every day (e.g., at 00:05).
+//   Input:
+//     - Reads "citizen_activity_hourly" for the past 24 hours (or "raw_events" for past 24h).
+//     - May need to query MongoDB for the latest `scoreSnapshot.currentScore` and `tier` for each citizen.
+//   Logic:
+//     - Aggregates hourly data to daily totals per citizen.
+//     - Combines with score snapshot from MongoDB.
+//   Output: Writes to "derived_metrics" bucket, "citizen_summary_daily" measurement.
+
+// Task 3: "Generate System Daily Aggregates"
+//   Trigger: Every day (e.g., at 00:10).
+//   Input: Reads from "citizen_summary_daily" for the past day.
+//   Logic:
+//     - Calculates system-wide and/or regional averages, medians, tier counts, etc.
+//   Output: Writes to "derived_metrics" bucket, "system_aggregates_daily" measurement.
+
+// Task 4: "Downsample Derived Metrics for Long Term Archives" (Example)
+//   Trigger: Every month.
+//   Input: Reads from "derived_metrics" (e.g., "system_aggregates_daily").
+//   Logic:
+//     - Aggregates daily data into monthly averages/sums.
+//   Output: Writes to "long_term_archives" bucket (if used) or to a downsampled measurement
+//           within "derived_metrics" with a naming convention like "system_aggregates_monthly".
+
+// Task 5: "Bucket Data Retention Enforcement"
+//   Logic: Standard InfluxDB bucket retention policies handle data deletion.
+//          Ensure these are set appropriately when buckets are created.
+//          (e.g., `raw_events` retention 30d, `derived_metrics` retention 365d).
+
 // База данных
 DATABASE social_credit_system
 
@@ -126,4 +293,142 @@ BEGIN
   INTO "social_credit_system"."aggregated_ten_years"."events_monthly"
   FROM "events"
   GROUP BY time(30d), citizen_id, event_type
-END 
+END
+
+# Bucket: raw_events
+# Measurement: citizen_event
+# Tags:
+#   - eventID: string
+#   - citizenID: string
+#   - eventType: string
+#   - eventSubtype: string
+#   - sourceSystem: string
+#   - region: string
+# Fields:
+#   - payload: string (JSON)
+#   - severity: float
+#   - confidence: float
+# Retention: 90 days
+
+# Bucket: derived_metrics
+# Measurement: score_change_history
+# Tags:
+#   - citizenID: string
+#   - ruleID: string
+#   - changeType: string (increase/decrease)
+# Fields:
+#   - oldScore: float
+#   - newScore: float
+#   - points: float
+#   - reason: string
+# Retention: 365 days
+
+# Measurement: citizen_activity_hourly
+# Tags:
+#   - citizenID: string
+#   - region: string
+# Fields:
+#   - eventCount: integer
+#   - uniqueEventTypes: integer
+#   - averageSeverity: float
+# Retention: 90 days
+
+# Measurement: citizen_summary_daily
+# Tags:
+#   - citizenID: string
+#   - region: string
+# Fields:
+#   - totalEvents: integer
+#   - scoreChange: float
+#   - maxSeverity: float
+#   - uniqueEventTypes: integer
+# Retention: 365 days
+
+# Measurement: system_aggregates_daily
+# Tags:
+#   - region: string
+# Fields:
+#   - totalEvents: integer
+#   - uniqueCitizens: integer
+#   - averageScore: float
+#   - scoreVariance: float
+# Retention: 365 days
+
+# Flux Tasks:
+
+# 1. Hourly Activity Aggregation
+option task = {
+  name: "hourly_activity_aggregation",
+  every: 1h
+}
+
+from(bucket: "raw_events")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._measurement == "citizen_event")
+  |> group(columns: ["citizenID", "region"])
+  |> aggregateWindow(
+    every: 1h,
+    fn: (tables=<-, column) => tables
+      |> count()
+      |> set(key: "_measurement", value: "citizen_activity_hourly")
+      |> set(key: "_field", value: "eventCount")
+  )
+  |> to(bucket: "derived_metrics")
+
+# 2. Daily Citizen Summary
+option task = {
+  name: "daily_citizen_summary",
+  every: 24h
+}
+
+from(bucket: "raw_events")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r._measurement == "citizen_event")
+  |> group(columns: ["citizenID", "region"])
+  |> aggregateWindow(
+    every: 24h,
+    fn: (tables=<-, column) => tables
+      |> count()
+      |> set(key: "_measurement", value: "citizen_summary_daily")
+      |> set(key: "_field", value: "totalEvents")
+  )
+  |> to(bucket: "derived_metrics")
+
+# 3. Daily System Aggregates
+option task = {
+  name: "daily_system_aggregates",
+  every: 24h
+}
+
+from(bucket: "derived_metrics")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r._measurement == "citizen_summary_daily")
+  |> group(columns: ["region"])
+  |> aggregateWindow(
+    every: 24h,
+    fn: (tables=<-, column) => tables
+      |> mean(column: "averageScore")
+      |> set(key: "_measurement", value: "system_aggregates_daily")
+      |> set(key: "_field", value: "averageScore")
+  )
+  |> to(bucket: "derived_metrics")
+
+# Example Queries:
+
+# 1. Get recent events for a citizen
+# from(bucket: "raw_events")
+#   |> range(start: -7d)
+#   |> filter(fn: (r) => r._measurement == "citizen_event" and r.citizenID == "12345")
+#   |> sort(columns: ["_time"], desc: true)
+
+# 2. Get score change history
+# from(bucket: "derived_metrics")
+#   |> range(start: -30d)
+#   |> filter(fn: (r) => r._measurement == "score_change_history" and r.citizenID == "12345")
+#   |> sort(columns: ["_time"], desc: true)
+
+# 3. Get daily activity summary
+# from(bucket: "derived_metrics")
+#   |> range(start: -7d)
+#   |> filter(fn: (r) => r._measurement == "citizen_activity_hourly" and r.citizenID == "12345")
+#   |> aggregateWindow(every: 24h, fn: sum) 

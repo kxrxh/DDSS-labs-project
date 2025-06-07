@@ -14,13 +14,38 @@ const (
 	PublicEventParticipation EventType = "public_event_participation"
 	TrafficViolation         EventType = "traffic_violation"
 	SocialMediaActivity      EventType = "social_media_activity"
+
+	// New Event Types for People Actions Scoring
+	VolunteerActivityParticipation EventType = "VolunteerActivityParticipation"
+	BloodDonationVerified          EventType = "BloodDonationVerified"
+	EducationalMilestoneAchieved   EventType = "EducationalMilestoneAchieved"
+	PublicCommendationReceived     EventType = "PublicCommendationReceived"
+	TimelyUtilityPaymentRecord     EventType = "TimelyUtilityPaymentRecord"
+	ExceptionalCivicContribution   EventType = "ExceptionalCivicContribution"
+	MinorCivicInfractionConfirmed  EventType = "MinorCivicInfractionConfirmed"
+	TrafficViolationSerious        EventType = "TrafficViolationSerious"
+	LoanPaymentDefaultedNotice     EventType = "LoanPaymentDefaultedNotice"
+	PublicDisturbanceValidated     EventType = "PublicDisturbanceValidated"
+	SpreadingHarmfulMisinformation EventType = "SpreadingHarmfulMisinformation"
+	ViolationOfCommunityGuidelines EventType = "ViolationOfCommunityGuidelines"
 )
+
+// EventLocation represents the geographic location of an event.
+type EventLocation struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	City      string  `json:"city"`
+	Country   string  `json:"country"`
+}
 
 // BaseEvent contains common fields for all events.
 type BaseEvent struct {
-	CitizenID string    `json:"citizen_id"`
-	EventType EventType `json:"event_type"`
-	Timestamp time.Time `json:"timestamp"`
+	CitizenID string        `json:"citizen_id"`
+	EventType EventType     `json:"event_type"`
+	Timestamp time.Time     `json:"timestamp"`
+	Location  EventLocation `json:"location"`
+	AgeGroup  string        `json:"age_group"`
+	Gender    string        `json:"gender"`
 }
 
 // FinancialEvent represents a financial transaction.
@@ -64,3 +89,6 @@ func (e FinancialEvent) GetBaseEvent() BaseEvent   { return e.BaseEvent }
 func (e PublicEvent) GetBaseEvent() BaseEvent      { return e.BaseEvent }
 func (e ViolationEvent) GetBaseEvent() BaseEvent   { return e.BaseEvent }
 func (e SocialMediaEvent) GetBaseEvent() BaseEvent { return e.BaseEvent }
+
+// BaseEvent itself also needs to satisfy EventWithBase if it's to be returned directly.
+func (b BaseEvent) GetBaseEvent() BaseEvent { return b }

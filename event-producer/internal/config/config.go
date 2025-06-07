@@ -8,12 +8,32 @@ import (
 	"time"
 )
 
-// Config holds the application configuration.
+// Config holds all configuration for the event producer.
 type Config struct {
+	// Kafka configuration
 	KafkaBrokers []string
 	KafkaTopic   string
-	NumCitizens  int
+
+	// MongoDB configuration
+	MongoURI string
+
+	// Dgraph configuration
+	DgraphURL string
+
+	// Event generation configuration
 	SendInterval time.Duration
+	NumCitizens  int
+}
+
+// NewDefaultConfig creates a new Config with default values.
+func NewDefaultConfig() *Config {
+	return &Config{
+		KafkaBrokers: []string{"localhost:9092"},
+		KafkaTopic:   "social-rating-events",
+		MongoURI:     "mongodb://mongodb-service.mongodb.svc.cluster.local:27017",
+		SendInterval: time.Second * 2,
+		NumCitizens:  25,
+	}
 }
 
 // LoadConfig loads configuration from environment variables or uses defaults.
@@ -21,7 +41,9 @@ func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		KafkaBrokers: []string{"localhost:19092"}, // Default Redpanda port
 		KafkaTopic:   "citizen_events",
-		NumCitizens:  10,
+		MongoURI:     "mongodb://mongodb-service.mongodb.svc.cluster.local:27017", // Default MongoDB URI
+		DgraphURL:    "dgraph-dgraph-alpha.dgraph.svc.cluster.local:9080",         // Default Dgraph URL (Helm chart)
+		NumCitizens:  25,
 		SendInterval: 2 * time.Second,
 	}
 
@@ -32,6 +54,14 @@ func LoadConfig() (*Config, error) {
 
 	if topic := os.Getenv("KAFKA_TOPIC"); topic != "" {
 		cfg.KafkaTopic = topic
+	}
+
+	if mongoURI := os.Getenv("MONGO_URI"); mongoURI != "" {
+		cfg.MongoURI = mongoURI
+	}
+
+	if dgraphURL := os.Getenv("DGRAPH_URL"); dgraphURL != "" {
+		cfg.DgraphURL = dgraphURL
 	}
 
 	if numCitizensStr := os.Getenv("NUM_CITIZENS"); numCitizensStr != "" {
@@ -55,21 +85,4 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-// --- Helper (kept private as only used here) ---
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-// getEnvSlice splits a comma-separated env var or returns fallback.
-func getEnvSlice(key string, fallback []string) []string {
-	if value, ok := os.LookupEnv(key); ok {
-		return strings.Split(value, ",")
-	}
-	return fallback
 }
