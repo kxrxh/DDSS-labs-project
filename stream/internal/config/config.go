@@ -24,15 +24,13 @@ type Config struct {
 	InfluxToken string
 	InfluxOrg   string
 	// Specific buckets for different data types
-	InfluxRawEventsBucket      string
-	InfluxDerivedMetricsBucket string
+	InfluxRawEventsBucket          string
+	InfluxDerivedMetricsBucket     string
+	InfluxAnalyticalDatasetsBucket string
 
 	// ScyllaDB configuration
 	ScyllaHosts    []string
 	ScyllaKeyspace string
-
-	// DuckDB configuration
-	DuckDBPath string
 
 	// Dgraph configuration
 	DgraphHosts []string
@@ -56,18 +54,16 @@ func LoadConfig() (*Config, error) {
 		MongoDatabase: "social_rating",
 
 		// InfluxDB defaults
-		InfluxURL:                  "http://influxdb.influxdb.svc.cluster.local:8086",
-		InfluxToken:                "SJlclSgz9_7kcda4525xgHreow5f64j7GWZtzVM79LQ35KAtjy3y306Djomc5hgD25WvERI0qqvsaGZ0_VAx7w==",
-		InfluxOrg:                  "social-rating",
-		InfluxRawEventsBucket:      "raw_events",
-		InfluxDerivedMetricsBucket: "derived_metrics",
+		InfluxURL:                      "http://influxdb.influxdb.svc.cluster.local:8086",
+		InfluxToken:                    "SJlclSgz9_7kcda4525xgHreow5f64j7GWZtzVM79LQ35KAtjy3y306Djomc5hgD25WvERI0qqvsaGZ0_VAx7w==",
+		InfluxOrg:                      "social-rating",
+		InfluxRawEventsBucket:          "raw_events",
+		InfluxDerivedMetricsBucket:     "derived_metrics",
+		InfluxAnalyticalDatasetsBucket: "analytical_datasets",
 
 		// ScyllaDB defaults
 		ScyllaHosts:    []string{"scylladb.scylladb.svc.cluster.local"},
 		ScyllaKeyspace: "social_rating",
-
-		// DuckDB defaults
-		DuckDBPath: "/tmp/social_rating_analytics.db",
 
 		// Dgraph defaults (based on Helm chart deployment: <release-name>-dgraph-alpha.<namespace>.svc.cluster.local)
 		DgraphHosts: []string{"dgraph-dgraph-alpha.dgraph.svc.cluster.local:9080"},
@@ -119,16 +115,16 @@ func LoadConfig() (*Config, error) {
 		cfg.InfluxDerivedMetricsBucket = influxDerivedMetricsBucket
 	}
 
+	if influxAnalyticalDatasetsBucket := os.Getenv("INFLUX_ANALYTICAL_DATASETS_BUCKET"); influxAnalyticalDatasetsBucket != "" {
+		cfg.InfluxAnalyticalDatasetsBucket = influxAnalyticalDatasetsBucket
+	}
+
 	if scyllaHosts := os.Getenv("SCYLLA_HOSTS"); scyllaHosts != "" {
 		cfg.ScyllaHosts = strings.Split(scyllaHosts, ",")
 	}
 
 	if scyllaKeyspace := os.Getenv("SCYLLA_KEYSPACE"); scyllaKeyspace != "" {
 		cfg.ScyllaKeyspace = scyllaKeyspace
-	}
-
-	if duckDBPath := os.Getenv("DUCKDB_PATH"); duckDBPath != "" {
-		cfg.DuckDBPath = duckDBPath
 	}
 
 	if dgraphHosts := os.Getenv("DGRAPH_HOSTS"); dgraphHosts != "" {
