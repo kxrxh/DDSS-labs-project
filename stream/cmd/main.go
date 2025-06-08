@@ -7,11 +7,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kxrxh/social-rating-system/stream/internal/backup"
 	"github.com/kxrxh/social-rating-system/stream/internal/config"
 	"github.com/kxrxh/social-rating-system/stream/internal/database"
 	"github.com/kxrxh/social-rating-system/stream/internal/health"
 	"github.com/kxrxh/social-rating-system/stream/internal/pipeline"
 	"github.com/kxrxh/social-rating-system/stream/internal/scoring"
+	"github.com/kxrxh/social-rating-system/stream/internal/sinks"
 )
 
 func main() {
@@ -43,6 +45,32 @@ func main() {
 	}
 	defer scyllaSession.Close()
 
+	// Initialize MinIO sink for backup operations
+	minioSink, err := sinks.NewMinIOSink(
+		cfg.MinIOEndpoint,
+		cfg.MinIOAccessKey,
+		cfg.MinIOSecretKey,
+		cfg.MinIOBucket,
+		cfg.MinIOUseSSL,
+		log.Default(),
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize MinIO sink: %v", err)
+	}
+
+	// Initialize backup manager
+	backupManager := backup.NewManager(minioSink, log.Default())
+	log.Println("Starting periodic backup scheduler...")
+	backupManager.SchedulePeriodicBackups(ctx)
+
+	// Perform initial system backup
+	log.Println("Creating initial system backup...")
+	if err := backupManager.BackupSystemSnapshot(ctx); err != nil {
+		log.Printf("Warning: Initial system backup failed: %v", err)
+	} else {
+		log.Println("Initial system backup completed successfully")
+	}
+
 	// Initialize scoring engine with Dgraph URL from config
 	dgraphURL := cfg.DgraphHosts[0] // Use first Dgraph host from config
 	scoringEngine := scoring.NewEngine(mongoClient, cfg.MongoDatabase, dgraphURL)
@@ -58,10 +86,14 @@ func main() {
 	defer kafkaClient.Close()
 
 	// Create and start stream processing pipeline
-	streamPipeline := pipeline.New(kafkaClient, scoringEngine, influxClient, scyllaSession, cfg)
+	streamPipeline := pipeline.New(kafkaClient, scoringEngine, influxClient, scyllaSession, minioSink, cfg)
+
+	// Add backup manager to pipeline for metrics reporting
+	streamPipeline.SetBackupManager(backupManager)
 
 	// Start health check server
 	healthServer := health.NewServer(":8080", streamPipeline)
+	healthServer.SetBackupManager(backupManager)
 	go healthServer.Start()
 
 	log.Println("Stream processor running. Press Ctrl+C to stop.")

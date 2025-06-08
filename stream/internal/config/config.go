@@ -35,6 +35,13 @@ type Config struct {
 	// Dgraph configuration
 	DgraphHosts []string
 
+	// MinIO configuration
+	MinIOEndpoint  string
+	MinIOAccessKey string
+	MinIOSecretKey string
+	MinIOBucket    string
+	MinIOUseSSL    bool
+
 	// Processing configuration
 	BatchSize     int
 	FlushInterval time.Duration
@@ -67,6 +74,13 @@ func LoadConfig() (*Config, error) {
 
 		// Dgraph defaults (based on Helm chart deployment: <release-name>-dgraph-alpha.<namespace>.svc.cluster.local)
 		DgraphHosts: []string{"dgraph-dgraph-alpha.dgraph.svc.cluster.local:9080"},
+
+		// MinIO defaults
+		MinIOEndpoint:  "minio-service.minio.svc.cluster.local:9000",
+		MinIOAccessKey: "admin",
+		MinIOSecretKey: "password123",
+		MinIOBucket:    "stream-backups",
+		MinIOUseSSL:    false,
 
 		// Processing defaults
 		BatchSize:     1000,
@@ -146,6 +160,29 @@ func LoadConfig() (*Config, error) {
 	if workersStr := os.Getenv("WORKERS"); workersStr != "" {
 		if workers, err := strconv.Atoi(workersStr); err == nil && workers > 0 {
 			cfg.Workers = workers
+		}
+	}
+
+	// MinIO environment variables
+	if minioEndpoint := os.Getenv("MINIO_ENDPOINT"); minioEndpoint != "" {
+		cfg.MinIOEndpoint = minioEndpoint
+	}
+
+	if minioAccessKey := os.Getenv("MINIO_ACCESS_KEY"); minioAccessKey != "" {
+		cfg.MinIOAccessKey = minioAccessKey
+	}
+
+	if minioSecretKey := os.Getenv("MINIO_SECRET_KEY"); minioSecretKey != "" {
+		cfg.MinIOSecretKey = minioSecretKey
+	}
+
+	if minioBucket := os.Getenv("MINIO_BUCKET"); minioBucket != "" {
+		cfg.MinIOBucket = minioBucket
+	}
+
+	if minioUseSSLStr := os.Getenv("MINIO_USE_SSL"); minioUseSSLStr != "" {
+		if minioUseSSL, err := strconv.ParseBool(minioUseSSLStr); err == nil {
+			cfg.MinIOUseSSL = minioUseSSL
 		}
 	}
 

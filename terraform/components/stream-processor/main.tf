@@ -44,6 +44,9 @@ resource "kubernetes_config_map_v1" "stream_processor_config" {
     "SCYLLA_HOSTS"      = var.scylla_hosts
     "SCYLLA_KEYSPACE"   = var.scylla_keyspace
     "DGRAPH_HOSTS"      = var.dgraph_hosts
+    "MINIO_ENDPOINT"    = var.minio_endpoint
+    "MINIO_ACCESS_KEY"  = var.minio_access_key
+    "MINIO_BUCKET"      = var.minio_bucket_name
     "BATCH_SIZE"        = tostring(var.batch_size)
     "WORKERS"           = tostring(var.workers)
     "FLUSH_INTERVAL"    = var.flush_interval
@@ -61,7 +64,8 @@ resource "kubernetes_secret_v1" "stream_processor_secrets" {
   }
 
   data = {
-    "INFLUX_TOKEN" = var.influxdb_token
+    "INFLUX_TOKEN"       = var.influxdb_token
+    "MINIO_SECRET_KEY"   = var.minio_secret_key
   }
 
   type = "Opaque"

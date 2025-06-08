@@ -1,19 +1,21 @@
 package scoring
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
+	"github.com/dgraph-io/dgo/v240"
+	"github.com/dgraph-io/dgo/v240/protos/api"
 	"github.com/kxrxh/social-rating-system/stream/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // CitizenCache represents a cached citizen record
@@ -31,8 +33,8 @@ type Engine struct {
 	rules       []models.ScoringRule
 
 	// Dgraph client for relationship queries
-	httpClient *http.Client
-	dgraphURL  string
+	dgraphClient *dgo.Dgraph
+	dgraphConn   *grpc.ClientConn
 
 	// Performance optimizations
 	citizenCache  map[string]*CitizenCache
@@ -47,17 +49,34 @@ func NewEngine(mongoClient *mongo.Client, database string, dgraphURL string) *En
 	engine := &Engine{
 		mongoClient:   mongoClient,
 		database:      database,
-		dgraphURL:     dgraphURL,
-		httpClient:    &http.Client{Timeout: 5 * time.Second},
 		citizenCache:  make(map[string]*CitizenCache),
 		updateBatch:   make(map[string]*models.Citizen),
 		batchInterval: 1 * time.Second, // Batch updates every second
+	}
+
+	// Initialize Dgraph gRPC client
+	log.Printf("Connecting to Dgraph at: %s", dgraphURL)
+	conn, err := grpc.Dial(dgraphURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("Warning: Failed to connect to Dgraph: %v", err)
+	} else {
+		engine.dgraphConn = conn
+		engine.dgraphClient = dgo.NewDgraphClient(api.NewDgraphClient(conn))
+		log.Printf("Successfully connected to Dgraph at: %s", dgraphURL)
 	}
 
 	// Start batch update processor
 	go engine.processBatchUpdates()
 
 	return engine
+}
+
+// Close closes the Dgraph connection
+func (e *Engine) Close() error {
+	if e.dgraphConn != nil {
+		return e.dgraphConn.Close()
+	}
+	return nil
 }
 
 // LoadConfiguration loads the system configuration and rules from MongoDB
@@ -391,6 +410,7 @@ func (e *Engine) processRelationshipImpact(ctx context.Context, event models.Eve
 	// Check if this event requires relationship processing
 	requiresProcessing, ok := event.Payload["requires_relationship_processing"].(bool)
 	if !ok || !requiresProcessing {
+		log.Printf("Event %s does not require relationship processing", event.EventID)
 		return
 	}
 
@@ -401,7 +421,13 @@ func (e *Engine) processRelationshipImpact(ctx context.Context, event models.Eve
 	isPositive, _ := event.Payload["is_positive"].(bool)
 	intensity, _ := event.Payload["intensity"].(float64)
 
+	log.Printf("Relationship details for event %s: type=%s, positive=%v, intensity=%.2f",
+		event.EventID, relationshipType, isPositive, intensity)
+
 	// Query related citizens from Dgraph based on relationship type
+	log.Printf("Querying Dgraph for related citizens of %s with relationship type: %s",
+		event.CitizenID, relationshipType)
+
 	relatedCitizens, err := e.queryRelatedCitizens(ctx, event.CitizenID, relationshipType)
 	if err != nil {
 		log.Printf("Failed to query related citizens for %s: %v", event.CitizenID, err)
@@ -409,9 +435,13 @@ func (e *Engine) processRelationshipImpact(ctx context.Context, event models.Eve
 	}
 
 	if len(relatedCitizens) == 0 {
-		log.Printf("No related citizens found for %s", event.CitizenID)
+		log.Printf("No related citizens found for %s with relationship type %s",
+			event.CitizenID, relationshipType)
 		return
 	}
+
+	log.Printf("Found %d related citizens for %s: %v",
+		len(relatedCitizens), event.CitizenID, relatedCitizens)
 
 	// Calculate impact factor based on event characteristics
 	impactFactor := e.calculateRelationshipImpactFactor(relationshipType, isPositive, intensity)
@@ -421,13 +451,21 @@ func (e *Engine) processRelationshipImpact(ctx context.Context, event models.Eve
 		len(relatedCitizens), impactFactor, secondaryScoreChange)
 
 	// Apply secondary effects to related citizens
-	for _, relatedCitizenID := range relatedCitizens {
+	for i, relatedCitizenID := range relatedCitizens {
+		log.Printf("Starting secondary score effect for citizen %d/%d: %s (change: %+.2f)",
+			i+1, len(relatedCitizens), relatedCitizenID, secondaryScoreChange)
 		go e.applySecondaryScoreEffect(ctx, relatedCitizenID, secondaryScoreChange, event)
 	}
+
+	log.Printf("Initiated secondary score effects for all %d related citizens of %s",
+		len(relatedCitizens), event.CitizenID)
 }
 
 // queryRelatedCitizens queries Dgraph for citizens related to the given citizen
 func (e *Engine) queryRelatedCitizens(ctx context.Context, citizenID string, relationshipType string) ([]string, error) {
+	log.Printf("Building Dgraph query for citizen %s with relationship type: %s",
+		citizenID, relationshipType)
+
 	// Build GraphQL++ query based on relationship type
 	var query string
 	switch relationshipType {
@@ -439,6 +477,7 @@ func (e *Engine) queryRelatedCitizens(ctx context.Context, citizenID string, rel
 				}
 			}
 		}`, citizenID, citizenID)
+		log.Printf("Using family_event query for citizen %s", citizenID)
 	case "workplace_event":
 		query = fmt.Sprintf(`{
 			citizen(func: eq(citizen_id, "%s")) {
@@ -447,6 +486,7 @@ func (e *Engine) queryRelatedCitizens(ctx context.Context, citizenID string, rel
 				}
 			}
 		}`, citizenID, citizenID)
+		log.Printf("Using workplace_event query for citizen %s", citizenID)
 	case "community_event":
 		// Query multiple relationship types for community events
 		query = fmt.Sprintf(`{
@@ -459,6 +499,7 @@ func (e *Engine) queryRelatedCitizens(ctx context.Context, citizenID string, rel
 				}
 			}
 		}`, citizenID, citizenID, citizenID)
+		log.Printf("Using community_event query (neighbors + friends) for citizen %s", citizenID)
 	default:
 		// Default to friends and general relationships
 		query = fmt.Sprintf(`{
@@ -468,85 +509,120 @@ func (e *Engine) queryRelatedCitizens(ctx context.Context, citizenID string, rel
 				}
 			}
 		}`, citizenID, citizenID)
+		log.Printf("Using default query (friends) for citizen %s with relationship type: %s",
+			citizenID, relationshipType)
 	}
 
+	log.Printf("Executing Dgraph query for citizen %s: %s", citizenID, query)
+
 	// Execute query against Dgraph
-	return e.executeDgraphQuery(ctx, query)
+	relatedCitizens, err := e.executeDgraphQuery(ctx, query)
+	if err != nil {
+		log.Printf("Dgraph query failed for citizen %s: %v", citizenID, err)
+		return nil, err
+	}
+
+	log.Printf("Dgraph query completed for citizen %s: found %d related citizens",
+		citizenID, len(relatedCitizens))
+
+	return relatedCitizens, nil
 }
 
 // executeDgraphQuery executes a query against Dgraph and returns citizen IDs
 func (e *Engine) executeDgraphQuery(ctx context.Context, query string) ([]string, error) {
-	url := fmt.Sprintf("http://%s/query", e.dgraphURL)
+	log.Printf("Executing Dgraph query: %s", query)
 
-	queryData := map[string]interface{}{
-		"query": query,
+	// Check if Dgraph client is available
+	if e.dgraphClient == nil {
+		log.Printf("Dgraph client not available, skipping query")
+		return []string{}, fmt.Errorf("dgraph client not available")
 	}
 
-	jsonData, err := json.Marshal(queryData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal query: %w", err)
-	}
+	// Create a new context with a longer timeout for Dgraph operations
+	dgraphCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	// Execute query against Dgraph
+	response, err := e.dgraphClient.NewTxn().Query(dgraphCtx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := e.httpClient.Do(req)
-	if err != nil {
+		log.Printf("Dgraph query failed: %v", err)
 		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("query failed with status %d", resp.StatusCode)
+	log.Printf("Dgraph query executed successfully")
+
+	// Check if response has data
+	if len(response.GetJson()) == 0 {
+		log.Printf("Dgraph query returned empty response")
+		return []string{}, nil
 	}
 
 	// Parse response
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(response.GetJson(), &result); err != nil {
+		log.Printf("Failed to decode Dgraph response: %v", err)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	log.Printf("Successfully decoded Dgraph response, extracting citizen IDs...")
+
 	// Extract citizen IDs from the response
-	return e.extractCitizenIDsFromResponse(result)
+	citizenIDs, err := e.extractCitizenIDsFromResponse(result)
+	if err != nil {
+		log.Printf("Failed to extract citizen IDs from Dgraph response: %v", err)
+		return nil, err
+	}
+
+	log.Printf("Extracted %d citizen IDs from Dgraph response: %v", len(citizenIDs), citizenIDs)
+
+	return citizenIDs, nil
 }
 
 // extractCitizenIDsFromResponse extracts citizen IDs from Dgraph query response
 func (e *Engine) extractCitizenIDsFromResponse(result map[string]interface{}) ([]string, error) {
 	citizenIDs := make([]string, 0)
+	log.Printf("Parsing Dgraph response to extract citizen IDs...")
 
 	data, ok := result["data"].(map[string]interface{})
 	if !ok {
+		log.Printf("No 'data' field found in Dgraph response")
 		return citizenIDs, nil
 	}
 
 	citizens, ok := data["citizen"].([]interface{})
 	if !ok || len(citizens) == 0 {
+		log.Printf("No citizens found in Dgraph response data")
 		return citizenIDs, nil
 	}
+
+	log.Printf("Found %d citizen records in Dgraph response", len(citizens))
 
 	// Process first citizen (the one we queried for)
 	if len(citizens) > 0 {
 		citizen := citizens[0].(map[string]interface{})
+		log.Printf("Processing relationships for queried citizen...")
 
 		// Extract different relationship types
 		relationshipTypes := []string{"family_member", "colleague", "neighbor", "friend"}
 		for _, relType := range relationshipTypes {
 			if relations, exists := citizen[relType].([]interface{}); exists {
-				for _, relation := range relations {
+				log.Printf("Found %d %s relationships", len(relations), relType)
+				for i, relation := range relations {
 					if relMap, ok := relation.(map[string]interface{}); ok {
 						if citizenID, exists := relMap["citizen_id"].(string); exists {
 							citizenIDs = append(citizenIDs, citizenID)
+							log.Printf("Extracted %s relationship %d/%d: %s",
+								relType, i+1, len(relations), citizenID)
 						}
 					}
 				}
+			} else {
+				log.Printf("No %s relationships found", relType)
 			}
 		}
 	}
 
+	log.Printf("Completed extraction: found %d total related citizens", len(citizenIDs))
 	return citizenIDs, nil
 }
 
@@ -577,20 +653,34 @@ func (e *Engine) calculateRelationshipImpactFactor(relationshipType string, isPo
 
 // applySecondaryScoreEffect applies secondary score effects to a related citizen
 func (e *Engine) applySecondaryScoreEffect(ctx context.Context, citizenID string, scoreChange float64, originalEvent models.Event) {
+	log.Printf("Starting secondary score effect for citizen %s: change=%+.2f, from event=%s",
+		citizenID, scoreChange, originalEvent.EventID)
+
 	// Get citizen data
 	citizen, err := e.getCitizenCached(ctx, citizenID)
 	if err != nil {
-		log.Printf("Failed to get related citizen %s: %v", citizenID, err)
+		log.Printf("Failed to get related citizen %s for secondary effect: %v", citizenID, err)
 		return
 	}
 
+	log.Printf("Retrieved citizen %s for secondary effect: current_score=%.2f",
+		citizenID, citizen.Score)
+
+	previousScore := citizen.Score
+
 	// Calculate new score with bounds checking
 	newScore := citizen.Score + scoreChange
+	originalNewScore := newScore
+
 	if newScore > e.config.MaxScore {
 		newScore = e.config.MaxScore
+		log.Printf("Capped score for citizen %s at maximum: %.2f -> %.2f",
+			citizenID, originalNewScore, newScore)
 	}
 	if newScore < e.config.MinScore {
 		newScore = e.config.MinScore
+		log.Printf("Capped score for citizen %s at minimum: %.2f -> %.2f",
+			citizenID, originalNewScore, newScore)
 	}
 
 	// Update citizen score using batch updates
@@ -599,8 +689,14 @@ func (e *Engine) applySecondaryScoreEffect(ctx context.Context, citizenID string
 	now := time.Now()
 	updatedCitizen.LastUpdated = now
 	updatedCitizen.LastScoreAt = &now
+
+	log.Printf("Scheduling batch update for citizen %s: %.2f -> %.2f",
+		citizenID, previousScore, newScore)
+
 	e.scheduleBatchUpdate(citizen.ID, &updatedCitizen)
 
 	log.Printf("Applied secondary effect to citizen %s from event %s: score %+.2f → %.2f (change: %+.2f)",
-		citizenID, originalEvent.EventID, citizen.Score, newScore, scoreChange)
+		citizenID, originalEvent.EventID, previousScore, newScore, scoreChange)
+
+	log.Printf("Secondary score effect completed for citizen %s", citizenID)
 }

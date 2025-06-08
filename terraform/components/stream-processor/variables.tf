@@ -147,4 +147,30 @@ variable "mongodb_init_job" {
   description = "MongoDB initialization job dependency"
   type        = any
   default     = null
+}
+
+# MinIO Configuration Variables
+variable "minio_endpoint" {
+  description = "MinIO endpoint URL"
+  type        = string
+  default     = "minio-service.minio.svc.cluster.local:9000"
+}
+
+variable "minio_access_key" {
+  description = "MinIO access key"
+  type        = string
+  default     = "admin"
+}
+
+variable "minio_secret_key" {
+  description = "MinIO secret key"
+  type        = string
+  sensitive   = true
+  default     = "password123"
+}
+
+variable "minio_bucket_name" {
+  description = "MinIO bucket name for stream backups"
+  type        = string
+  default     = "stream-backups"
 } 

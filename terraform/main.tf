@@ -71,6 +71,23 @@ module "cert_manager" {
   # cert_manager_chart_version = "v1.13.3" # Pin to a specific version
 }
 
+module "minio" {
+  source = "./components/minio"
+
+  # Use emptyDir for fast development deployment (data won't persist across pod restarts)
+  use_persistent_storage = false
+  storage_size          = "10Gi"
+
+  # You can override default MinIO settings here if needed, for example:
+  # namespace           = "minio-backup"
+  # use_persistent_storage = true  # Enable for production
+  # storage_class       = "fast-ssd"
+  # storage_size        = "100Gi"
+  # minio_root_user     = "backup-admin"
+  # minio_root_password = "secure-password-123"
+  # replicas            = 2
+}
+
 locals {
   # Absolute path to the event-producer source directory, relative to the terraform root.
   event_producer_src_dir = abspath("${path.root}/../event-producer")
@@ -118,6 +135,12 @@ module "stream_processor" {
 
   # Dgraph configuration
   dgraph_hosts     = "dgraph-dgraph-alpha.dgraph.svc.cluster.local:9080"
+
+  # MinIO configuration for backup
+  minio_endpoint   = module.minio.minio_endpoint
+  minio_access_key = module.minio.minio_root_user
+  minio_secret_key = module.minio.minio_root_password
+  minio_bucket_name = "stream-backups"
 
   # Processing configuration
   batch_size       = 500
